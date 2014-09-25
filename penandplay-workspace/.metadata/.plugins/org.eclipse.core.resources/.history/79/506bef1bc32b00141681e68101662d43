@@ -1,0 +1,161 @@
+package com.penandplay;
+
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import android.util.Log;
+
+import com.google.libvpx.LibVpxEnc;
+import com.google.libvpx.LibVpxEncConfig;
+import com.google.libvpx.LibVpxException;
+import com.google.libvpx.Rational;
+import com.google.libvpx.VpxCodecCxPkt;
+import com.google.libwebm.mkvmuxer.MkvWriter;
+import com.google.libwebm.mkvmuxer.Segment;
+import com.google.libwebm.mkvmuxer.SegmentInfo;
+
+//TODO Video quality setting 
+public class VideoEncoder implements Callable<String>  {
+	
+	private static LibVpxEncConfig encoderConfig;
+	private static LibVpxEnc	encoder;
+	private static int framesIn = 1;
+	private static Rational timeBase;
+	private static Rational frameRate;			
+	private static Rational timeMultiplier;
+	private static MkvWriter mkvWriter;
+	private static Segment muxerSegment;
+	private static SegmentInfo muxerSegmentInfo;
+	private static long newVideoTrackNumber;
+	
+	public static String webmOutputName;
+	private static int rate;
+	private static long fourcc;
+	private static int scale;
+	
+	private static final String TAG = "VideoEncoder";
+	
+	
+
+
+	public VideoEncoder(int fps) {
+		rate = 12fps
+		
+	}
+	
+	public String call(){
+		String videoname = webmOutputName;
+
+		return videoname;
+	}
+	
+	public void initialize(int width, int height, double fps ){
+		webmOutputName=DisplaySequenceActivity.session+"temp.webm";
+		rate=(int)Math.round(fps);
+		fourcc=LibVpxEnc.FOURCC_ARGB;
+		scale =1;
+		encoderConfig = null;
+		encoder = null;
+		mkvWriter = null;
+		
+	
+		Log.d(TAG,"video width: "+width);
+		Log.d(TAG,"video height: "+ height);
+	
+				
+		
+			try {
+				encoderConfig = new LibVpxEncConfig(width, height);
+			} catch (LibVpxException e) {
+				Log.d(TAG,"LibVpxEncConfig exception." + e);
+				e.printStackTrace();
+			}
+			try {
+				encoder = new LibVpxEnc(encoderConfig);
+			} catch (LibVpxException e) {
+				Log.d(TAG,"LibVpxEnc exception" + e);
+				e.printStackTrace();
+			}
+
+			// libwebm expects nanosecond units
+			encoderConfig.setTimebase(1, 1000000000);
+			timeBase = encoderConfig.getTimebase();
+			frameRate = new Rational(rate, scale);
+			timeMultiplier = timeBase.multiply(frameRate).reciprocal();
+			framesIn = 1;
+			
+			mkvWriter = new MkvWriter();
+			if (!mkvWriter.open(webmOutputName)) {
+				Log.d(TAG,"WebM Output name is invalid or error while opening.");
+				
+			}
+			muxerSegment = new Segment();
+			if (!muxerSegment.init(mkvWriter)) {
+				Log.d(TAG,"Could not initialize muxer segment.");
+				
+			}
+			muxerSegmentInfo = muxerSegment.getSegmentInfo();
+			muxerSegmentInfo.setWritingApp("Pen_and_Play output");
+			
+			newVideoTrackNumber = muxerSegment.addVideoTrack(width,height, 0);
+			if (newVideoTrackNumber == 0) {
+				Log.d(TAG,"Could not add video track.");
+				
+			}
+		
+		return;
+			
+		
+		
+	}
+	
+	public void addFrame(int[] pixeldata){
+		
+		
+		
+		//scaled.getPixels (pix, 0, w, 0, 0, w, h);
+		
+		long frameStart = timeMultiplier.multiply(framesIn - 1).toLong();
+		long nextFrameStart = timeMultiplier.multiply(framesIn).toLong();	
+																							//duration		
+		ArrayList<VpxCodecCxPkt> encPkt=null;
+		try {
+			encPkt = encoder.convertIntEncodeFrame(pixeldata, frameStart,nextFrameStart - frameStart, fourcc);
+		} catch (LibVpxException e1) {
+			// TODO Auto-generated catch block
+			Log.d(TAG,"LibVpxException" + e1);
+		}
+		for (int i = 0; i < encPkt.size(); i++) {
+			VpxCodecCxPkt pkt = encPkt.get(i);
+			final boolean isKey = (pkt.flags & 0x1) == 1;
+			if (!muxerSegment.addFrame(pkt.buffer, newVideoTrackNumber,
+					pkt.pts, isKey)) {
+				Log.d(TAG,"Could not add frame.");
+				
+			}
+		}
+		++framesIn;
+		
+		
+	}
+	
+	public void finalizeVid(){
+		
+		if (!muxerSegment.finalizeSegment()) {
+			Log.d(TAG,"Finalization of segment failed. WTF");				
+		}		
+		if (encoder != null) {
+			encoder.close();
+		}
+		if (encoderConfig != null) {
+			encoderConfig.close();
+		}
+		if (mkvWriter != null) {
+			mkvWriter.close();
+		}
+		
+	}
+
+	
+
+
+}

@@ -1,0 +1,266 @@
+package org.opencv.redraw;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnTouchListener;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+
+public class DisplaySequenceActivity extends Activity implements SurfaceHolder.Callback, Runnable {
+	private static final String TAG = "DisplaySequence";
+	private String directory; 
+	private File[] files;
+	private File[] ordered_files;
+	int width;
+	int height;
+	int interval = 80;
+	
+	//private ImageView jpgView;
+	
+	private SurfaceView sSurfaceView;
+	private SurfaceHolder sHolder;
+	public Canvas canvas;	
+	Thread t = null;
+	boolean running = false;
+	 Paint paint;
+	
+	 public DisplaySequenceActivity() {
+		
+		
+		paint= new Paint(Paint.FILTER_BITMAP_FLAG |
+		                    Paint.DITHER_FLAG |
+		                    Paint.ANTI_ALIAS_FLAG);
+	        Log.i(TAG, "new " + this.getClass());
+	    	    }
+	 
+	    /** Called when the activity is first created. */
+	    @SuppressLint("NewApi")
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {
+	    	super.onCreate(savedInstanceState);
+	 
+	    	//open xmls and save to sd card for native access 
+	    	Log.i(TAG, "display sequence activity created ");
+
+	    	setContentView(R.layout.redraw_sequence_view);
+	        Log.i(TAG, "set content view");
+
+	    	
+	    	sSurfaceView = (SurfaceView)findViewById(R.id.sequence);
+	    	Log.i(TAG, "sequence layout set " + this.getClass());
+
+	    	sHolder = sSurfaceView.getHolder();
+			Log.i(TAG, "Surface Holder instantiated");
+		    sHolder.addCallback(this);
+		    Log.i(TAG, "Surface Holder Callback set");
+
+
+		    
+		    sSurfaceView.setOnTouchListener(new View.OnTouchListener() {  
+		        @Override
+		        public boolean onTouch(View arg0, MotionEvent arg1) {
+		        	interval = interval * 2;
+		        	if (interval = 2000){interval = 40;}
+		        	Log.i(TAG,"onTouch event"); 
+			      
+			     
+		            return true;
+		        }
+		    });
+	    	
+	    	Intent intent = getIntent(); // gets the previously created intent
+	        String dir = intent.getStringExtra("directory");
+		    //String dir = "/mnt/sdcard/RedRaw/img_2013-08-08_11-18-37";
+
+		    Log.i(TAG, "got directory value " + dir);
+		        
+		        directory = dir;
+	         Log.i(TAG, "Image directory " + directory);
+	    		        
+		        File parentDir = new File(directory);
+		        files = parentDir.listFiles();
+		        //Log.i(TAG, "files listed");
+		        Arrays.sort(files);
+		        Log.i(TAG, "files sorted");
+		        
+		        
+	    }
+	     
+	    @SuppressLint("NewApi")
+		
+		@Override
+	    public void onStart()
+	    {   super.onStart();
+    		Log.i(TAG, "onStart Called" );	    
+    	
+	        
+	    }
+	    
+	    @Override
+	    public void onResume()
+	    {   super.onResume();
+	    	Log.i(TAG, "onResume Called" );
+	    	running = true;
+		    t = new Thread(this);
+		    t.start();
+	    }
+	    @Override
+	    public void onPause()
+	    {
+	    	super.onPause();
+	      	Log.i(TAG,"onPause event"); 
+	     	running = false;
+	      	Log.i(TAG,"running false"); 
+/*
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+*/
+		    t = null;
+		    Log.i(TAG,"paused"); 
+	    }
+	    public void onDestroy() {
+	        super.onDestroy();
+	    	running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	
+	        Intent capture_intent = new Intent(getBaseContext(), RedRawActivity.class);
+	        startActivity(capture_intent);
+	    }
+
+	 
+
+		@Override
+		public void surfaceChanged(SurfaceHolder holder, int format, int width,
+				int height) {
+			// TODO Auto-generated method stub
+		
+
+			
+		}
+
+		@Override
+		public void surfaceCreated(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void surfaceDestroyed(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+			running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+		}
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+	    	Display display = getWindowManager().getDefaultDisplay();
+	    	Point size = new Point();
+	    	width = display.getWidth();  // deprecated
+	    	height = display.getHeight();  // deprecated
+	    	if (height>width){
+	    		Log.i(TAG, "portrait orinetation?" );
+	    		height= display.getWidth();  // deprecated
+	    		width = display.getHeight();  // deprecated
+		    		
+	    	}
+	    	
+	    	/*display.getSize(size); //API 13 doesnt work on xperia active 2.3.4.
+	    	width = size.x;
+	    	height = size.y;*/
+	        Log.i(TAG, "width: "+width+", height: " + height );
+			ArrayList<Bitmap> bitmapArray = new ArrayList<Bitmap>();
+
+			for (File file : files) {
+
+				if(file.getName().endsWith(".JPG")){
+					String filename = directory+File.separator+file.getName();
+					Log.i(TAG, "JPG Image " + filename);
+					Bitmap fullSize = BitmapFactory.decodeFile(filename);
+					Bitmap bitmap = Bitmap.createScaledBitmap (fullSize,width, height, true);
+
+					bitmapArray.add(bitmap);
+
+				
+
+				}
+			}
+
+			
+			while (running){
+				for (Bitmap image : bitmapArray) {
+
+					
+						
+						canvas = null;
+						try {
+							canvas = sHolder.lockCanvas(null);
+							synchronized (sHolder) {
+								//Log.i(TAG, "drawing bitmap");
+								canvas.drawBitmap(image, 0, 0, paint);
+								//Log.i(TAG, "drawing bitmap DONE ");
+
+							}
+						} finally {
+							// do this in a finally so that if an exception is thrown
+							// during the above, we don't leave the Surface in an
+							// inconsistent state
+							if (canvas != null) {
+								sHolder.unlockCanvasAndPost(canvas);
+							}
+						}
+
+						//Log.i(TAG, "sleeping");
+
+						try {
+							Thread.sleep(interval);
+							//Thread.sleep(1500);
+						} catch (InterruptedException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+
+					}
+				}
+			
+		}
+}

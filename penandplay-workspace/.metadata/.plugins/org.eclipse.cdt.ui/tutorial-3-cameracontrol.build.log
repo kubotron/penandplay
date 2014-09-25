@@ -1,0 +1,7 @@
+
+**** Build of configuration Default for project tutorial-3-cameracontrol ****
+
+/home/kubo/android-ndk-r8e/ndk-build 
+make: *** No rule to make target `jni/find_frames.cpp', needed by `obj/local/armeabi-v7a/objs/find_frames/find_frames.o'.  Stop.
+
+**** Build Finished ****

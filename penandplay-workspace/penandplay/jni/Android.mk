@@ -1,0 +1,19 @@
+LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+	
+#OPENCV_CAMERA_MODULES:=on
+OPENCV_INSTALL_MODULES:=on
+OPENCV_LIB_TYPE:=STATIC
+
+include /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/OpenCV.mk
+
+LOCAL_MODULE    := find_frames
+LOCAL_SRC_FILES := find_frames.cpp
+LOCAL_LDLIBS +=  -llog -ldl
+
+include $(BUILD_SHARED_LIBRARY)
+
+WORKING_DIR := $(LOCAL_PATH)
+BINDINGS_DIR := $(WORKING_DIR)/bindings/JNI
+include $(BINDINGS_DIR)/Android.mk

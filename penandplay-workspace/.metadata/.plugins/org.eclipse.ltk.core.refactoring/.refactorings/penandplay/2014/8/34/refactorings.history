@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;penandplay/res/anim/unhidearrowsxml&apos; to &apos;unhidearrows.xml&apos;" description="Rename resource &apos;unhidearrowsxml&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="res/anim/unhidearrowsxml" name="unhidearrows.xml" stamp="1408472756539" updateReferences="true"/>
+</session>

@@ -1,0 +1,202 @@
+package org.opencv.redraw;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import org.opencv.android.OpenCVLoader;
+import org.opencv.redraw.R;
+
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.hardware.Camera;
+import android.hardware.Camera.PictureCallback;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnTouchListener;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+
+import org.opencv.redraw.RedRawView;
+
+public class RedRawActivity extends Activity implements OnTouchListener, PictureCallback {
+
+	private static final String TAG = "RedRaw Activity";
+	public native void FindFrames(String s);
+	private Camera mCamera;
+	private RedRawView mPreview;
+
+	private SurfaceView mSurfaceView = null;
+	private SurfaceHolder mHolder;
+	private boolean nextPhoto = true;
+	
+    static {
+    	Log.i(TAG, "trying to load opencv_java ");
+    	System.loadLibrary("opencv_java"); //load opencv_java limb
+    	System.loadLibrary("opencv_info"); //load opencv_java lib
+    	Log.i(TAG, "opencv_java loaded (probably)");
+        if (!OpenCVLoader.initDebug()) {
+        	Log.i(TAG, "OpenCV didn't load");
+            // Handle initialization error
+        } else {
+        	Log.i(TAG, "OpenCV loaded successfully");
+            System.loadLibrary("find_frames");
+            Log.i(TAG, "Native library loaded");
+        }
+    }
+    public RedRawActivity() {
+        Log.i(TAG, "Instantiated new " + this.getClass());
+    }
+ 
+    /** Called when the activity is first created. */
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+    	super.onCreate(savedInstanceState);
+ 
+    	mCamera=getCameraInstance();
+    	     	
+    	RedRawView mPreview = new RedRawView(this, mCamera);
+    	setContentView(R.layout.redraw_surface_view);
+    	
+    	FrameLayout preview=(FrameLayout)findViewById(R.id.redraw_java_surface_view);
+    	Log.i(TAG, "frame layout set " + this.getClass());
+    	preview.addView(mPreview);
+        mPreview.setOnTouchListener(this);
+    	
+        Log.i(TAG, "creating RedRaw directory " + this.getClass());
+        File directory = new File(Environment.getExternalStorageDirectory()+File.separator+"RedRaw");
+        directory.mkdirs();
+    }
+     
+    @SuppressLint("NewApi")
+	@Override
+    public void onResume()
+    {   super.onResume();
+    	Log.i(TAG, "onResume Called" );
+    	if (mCamera==null){
+    	mCamera = getCameraInstance();
+    	}
+ 
+    }
+    @Override
+    public void onPause()
+    {
+        super.onPause();
+        if (mCamera!= null)
+            stopPreviewAndFreeCamera();
+    }
+    public void onDestroy() {
+        super.onDestroy();
+        if (mCamera!= null)
+            stopPreviewAndFreeCamera();
+    }
+
+
+    @SuppressLint("SimpleDateFormat")
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+
+        Log.i(TAG,"onTouch event");
+        if(nextPhoto){//to prevent "double click"
+        	nextPhoto=false;
+             
+        takePicture();
+        mCamera.startPreview();
+      
+        
+        }
+        return false;
+    }
+    
+   
+    public void takePicture() {
+
+      mCamera.takePicture(null,null,this);	
+      Log.i(TAG,"take picture call DONE");	  
+     
+    }
+    
+    @Override
+    public void onPictureTaken(byte[] data, Camera camera) {
+    	Log.i(TAG, "CALLBACK");
+        try { 
+		            //async task for storing the photo
+  		            new SavePhotoTask().execute(data, null, null);
+
+  		        
+  		        } catch (final Exception e) {
+  		        	Log.i(TAG, "WTF cannot save" , e);
+  		            //some exceptionhandling
+  		        }
+        		finally{
+        		nextPhoto = true;
+
+            
+        		}
+        		}
+  		    
+
+  		
+    class SavePhotoTask extends AsyncTask<byte[], Void, Void> {
+        @SuppressLint("SimpleDateFormat")
+		@Override
+        protected Void doInBackground(byte[]... jpeg) {
+        
+        	   SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+               String currentDateandTime = sdf.format(new Date());
+               String fileName = Environment.getExternalStorageDirectory().getPath() +
+                                      "/RedRaw/sample_picture_" + currentDateandTime + ".jpg";
+               					//	 "/RedRaw/test_picture.jpg";
+            
+
+            Log.i(TAG, "saved " + fileName);
+/*
+          if (photo.exists()) {
+            photo.delete();
+          }
+*/
+          try {
+             	FileOutputStream fos=new FileOutputStream(fileName);
+    			fos.write(jpeg[0]);
+    			fos.close();
+          }
+          catch (java.io.IOException e) {
+            Log.e(TAG,"Exception in SavePhotoTask");
+          }
+          FindFrames(fileName);
+          return(null);
+        }
+      }
+
+    public static Camera getCameraInstance(){
+        Camera c = null;
+        try {
+            c = Camera.open(); // attempt to get a Camera instance
+        }
+        catch (Exception e){
+        	Log.e(TAG, "CAN'T GET CAMERA");
+            // Camera is not available (in use or does not exist)
+        }
+        return c; // returns null if camera is unavailable
+    }
+     
+    private void stopPreviewAndFreeCamera() {
+        if (mCamera != null) {
+            mCamera.stopPreview();
+            mCamera.release();
+            mCamera = null;
+        }
+    }
+    
+
+    
+   } 
+

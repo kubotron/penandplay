@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:layout_gravity="center_vertical|center_horizontal"
+    android:foregroundGravity="center"
+    android:orientation="horizontal" >
+
+    <SurfaceView
+        android:id="@+id/sequence"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" />
+    <!--
+   <FrameLayout
+    android:id="@+id/sequence"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    
+    />
+    -->
+
+    <ImageView
+        android:id="@+id/video_preview_picture"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:background="@null"
+        android:scaleType="fitCenter"
+        android:src="@null" />
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" >
+
+        <ImageButton
+            android:id="@+id/loop_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+               android:layout_alignParentRight="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginLeft="1dp"
+            android:layout_marginRight="1dp"
+            android:layout_marginTop="1dp"
+            android:background="@null"
+            android:src="@drawable/ic_columns" />
+
+        <ImageButton
+            android:id="@+id/left_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="1dp"
+            android:layout_marginRight="1dp"
+            android:layout_marginBottom="2dp"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentBottom="true"
+            android:background="@null"            
+            android:src="@drawable/ic_left" />
+
+        <ImageButton
+            android:id="@+id/right_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="1dp"
+            android:layout_marginRight="1dp"
+            android:layout_marginTop="1dp"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentBottom="true"            
+            android:background="@null"            
+            android:src="@drawable/ic_right" />
+
+        <ImageButton
+            android:id="@+id/play_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true"
+            android:layout_marginLeft="7dp"
+            android:layout_marginRight="2dp"
+            android:layout_marginTop="2dp"
+            android:background="@null"
+            android:src="@drawable/ic_pause" />
+
+        <ImageButton
+            android:id="@+id/photo_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:layout_marginRight="5dp"
+            android:background="@null"
+            android:src="@drawable/ic_photo" />
+
+        <ImageButton
+            android:id="@+id/upload_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginRight="2dp"
+            android:layout_marginleft="2dp"
+            android:layout_marginTop="2dp"
+            android:background="@null"
+            android:src="@drawable/ic_cloud" />
+        <!--
+		        <ImageButton
+		        android:id="@+id/settings_button"
+		        android:layout_width="wrap_content"
+		        android:layout_height="wrap_content"
+		        android:layout_alignParentRight="true"
+			    android:layout_alignParentTop="true"
+			    android:layout_marginRight="2dp"
+			    android:layout_marginTop="2dp"
+		        android:src="@drawable/ic_settings"
+		        android:background="@null" />
+        -->
+    </RelativeLayout>
+
+</FrameLayout>

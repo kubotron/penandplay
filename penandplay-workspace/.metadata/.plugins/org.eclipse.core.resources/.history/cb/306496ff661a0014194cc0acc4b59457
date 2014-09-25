@@ -1,0 +1,370 @@
+package com.pencilation;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import com.pencilation.R;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnTouchListener;
+import android.widget.ImageButton;
+import android.widget.Toast;
+
+public class DisplaySequenceActivity extends Activity implements SurfaceHolder.Callback, OnTouchListener{
+		
+	private ScreenUpdater upd;
+	private static final String TAG = "DisplaySequence";
+	private String directory; 
+	private ArrayList<File> all_files;
+	private File[] ordered_files;
+	int width;
+	int height;
+	//public String fileName;
+	public float framerate;
+	private Thread t = null;
+	private File parentDir;
+	private File[] files;
+	private ImageButton playButton;
+	private ImageButton photoButton;
+	private OnClickListener playListener;
+	private OnClickListener photoListener;
+	private static boolean paused=false;
+	
+	
+	private SurfaceView sSurfaceView;
+	private SurfaceHolder sHolder;
+	public Canvas canvas;	
+	 Paint paint;
+	
+	 public DisplaySequenceActivity() {
+		
+		
+		paint= new Paint(Paint.FILTER_BITMAP_FLAG |
+		                    Paint.DITHER_FLAG |
+		                    Paint.ANTI_ALIAS_FLAG);
+	        Log.i(TAG, "new " + this.getClass());
+	    	    }
+	 
+	    /** Called when the activity is first created. */
+	    @SuppressLint("NewApi")
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {
+	    	super.onCreate(savedInstanceState);
+	    	upd = new ScreenUpdater();
+	    	//open xmls and save to sd card for native access 
+	    	Log.i(TAG, "display sequence activity created ");
+
+	    	setContentView(R.layout.redraw_sequence_view);
+	        Log.i(TAG, "set content view");
+
+	    	
+	    	sSurfaceView = (SurfaceView)findViewById(R.id.sequence);
+	    	Log.i(TAG, "sequence layout set " + this.getClass());
+
+	    	sHolder = sSurfaceView.getHolder();
+			Log.i(TAG, "Surface Holder instantiated");
+		    sHolder.addCallback(this);
+		    Log.i(TAG, "Surface Holder Callback set");
+		    sSurfaceView.setOnTouchListener(this);
+
+		    playButton=(ImageButton)findViewById(R.id.play_button);
+	        photoButton=(ImageButton)findViewById(R.id.photo_button);
+		    
+	        playListener = new OnClickListener(){
+	            public void onClick(View v)
+	            {   if (paused){//TODO play pause 
+	            	 	paused=false;	
+	            	}else{
+	            	 	paused=true;
+	            	}
+	            	
+	            }
+	        };
+	       photoListener = new OnClickListener(){
+	            public void onClick(View v)
+	            {          Intent capture_intent = new Intent(getBaseContext(), RedRawActivity.class);
+	            			capture_intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+	            			startActivity(capture_intent);
+	            }
+	        };
+	        photoButton.setOnClickListener(photoListener); 
+	        playButton.setOnClickListener(playListener); 
+
+	        
+		    
+	    	Intent intent = getIntent(); // gets the previously created intent
+	        directory = intent.getStringExtra("directory");
+	       //fileName = intent.getStringExtra("image");
+		    	        
+
+
+	         Log.i(TAG, "Image directory " + directory);
+	    		        
+		        parentDir = new File(directory);
+		    	all_files=new ArrayList<File>();
+
+		        //files = parentDir.listFiles();
+		        
+		        if(parentDir.exists()){
+			        Log.i(TAG, parentDir +" exists");
+
+		            files = parentDir.listFiles();
+			        Log.i(TAG, files.length+" files listed " );
+
+		            if(null!=files){
+
+		                for(int i=0; i<files.length; i++) {
+            			    Log.d(TAG,"checking "+ files[i].getName());
+
+		                	
+		                    if(files[i].isDirectory()) {
+		                    }
+		                    else {
+		                 		if(files[i].getName().endsWith(".png")){
+		                    				all_files.add(files[i]);
+		                    			    Log.d(TAG,"adding  "+ files[i].getName());
+		                   		}
+		                  
+		                    }
+		                }
+		            }
+		        }
+		        
+		        ordered_files = new File[ all_files.size() ];
+		        all_files.toArray( ordered_files );
+		        //Log.i(TAG, "files listed");
+		        Arrays.sort(ordered_files);
+		        Log.i(TAG, "files sorted");
+		       /* for(int j=0; j<ordered_files.length; j++){
+		        	 Log.i(TAG, "files sorted");
+		        }*/
+		        
+		        
+	    }
+	     
+	    @SuppressLint("NewApi")
+		
+		@Override
+	    public void onStart()
+	    {   super.onStart();
+    		Log.i(TAG, "onStart Called" );	    
+    	
+	        
+	    }
+	
+	    @Override
+	    public void onBackPressed() {
+	            super.onBackPressed();
+		      	
+	          this.finish();
+	    }
+	    
+	    @Override
+	    public void onResume()
+	    {   super.onResume();
+	    	Log.i(TAG, "onResume Called" );
+	    	
+	    	t = new Thread(upd);
+	    	upd.running = true;
+		    t.start();
+	    }
+	    @Override
+	    public void onPause()
+	    {
+	    	super.onPause();
+	      	Log.i(TAG,"onPause event"); 
+	     	upd.running = false;
+	      	Log.i(TAG,"running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.i(TAG,"paused"); 
+	    }
+	    
+	    @Override
+	    public void onDestroy() {
+	        //deleteDirectory(parentDir);
+	        super.onDestroy();
+
+	    }
+
+	 
+
+		@Override
+		public void surfaceChanged(SurfaceHolder holder, int format, int width,
+				int height) {
+			// TODO Auto-generated method stub
+		
+
+			
+		}
+
+		@Override
+		public void surfaceCreated(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void surfaceDestroyed(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+			if(t == null){
+			upd.running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+			}
+		}
+
+
+		private class ScreenUpdater implements Runnable{
+			long startTime;
+			long estimatedTime;	  
+			public boolean running = false;
+			public int interval=60;
+					
+			@Override
+			public void run() {
+
+		    	Display display = getWindowManager().getDefaultDisplay();
+		    	Point size = new Point();
+		    	width = display.getWidth();  // deprecated
+		    	height = display.getHeight();  // deprecated
+		    	if (height>width){
+		    		Log.i(TAG, "portrait orinetation?" );
+		    		height= display.getWidth();  // deprecated
+		    		width = display.getHeight();  // deprecated
+			    		
+		    	}
+		    	
+		    	/*display.getSize(size); //API 13 doesnt work on xperia active 2.3.4.
+		    	width = size.x;
+		    	height = size.y;*/
+		        Log.i(TAG, "width: "+width+", height: " + height );
+		
+		        ArrayList<Bitmap> bitmapArray = new ArrayList<Bitmap>();
+
+				for (File file : ordered_files) {
+						String filename = directory+File.separator+file.getName();
+						Log.i(TAG, "png Image " + filename);
+						Bitmap fullSize = BitmapFactory.decodeFile(filename);
+						Log.i(TAG, "decoded");
+
+						Bitmap bitmap = Bitmap.createScaledBitmap (fullSize,width, height, true);
+						Log.i(TAG, "scaled");
+						bitmapArray.add(bitmap);
+						Log.i(TAG, "added");
+				}
+				Log.i(TAG, "start running");
+				int inter;
+				
+				while (running){
+					for (Bitmap image : bitmapArray) {
+
+							startTime = System.nanoTime();    
+							
+							canvas = null;
+							try {
+								Log.i(TAG, "locking canvas");
+								canvas = sHolder.lockCanvas(null);
+								synchronized (sHolder) {
+									if(canvas==null){
+										Log.i(TAG, "WTF canvas null");
+									}
+									canvas.drawBitmap(image, 0, 0, paint);
+									Log.i(TAG, "drawing bitmap DONE ");
+
+								}
+							}
+							catch(Exception e ){
+								Log.i(TAG, "NOPE " + e);
+								
+							} finally {
+								// do this in a finally so that if an exception is thrown
+								// during the above, we don't leave the Surface in an
+								// inconsistent state
+								if (canvas != null) {
+									sHolder.unlockCanvasAndPost(canvas);
+								}
+							}
+
+							inter = interval;
+							try {
+								Thread.sleep(inter*100);
+							} catch (InterruptedException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+							
+							 estimatedTime = System.nanoTime() - startTime;
+					         framerate = 1000000000/estimatedTime;	  
+						}
+					}
+				
+			}
+			
+		}
+
+
+		@Override
+		   public boolean onTouch(View arg0, MotionEvent event) {
+			// TODO Auto-generated method stub
+
+			return false;
+		}
+	    
+		   private boolean deleteDirectory(File directory) {
+		        if(directory.exists()){
+		            File[] files = directory.listFiles();
+		            if(null!=files){
+		                for(int i=0; i<files.length; i++) {
+		                    if(files[i].isDirectory()) {
+		                        deleteDirectory(files[i]);
+		                    }
+		                    else {
+		                        files[i].delete();
+		                    }
+		                }
+		            }
+		        }
+		        Log.d(TAG,"deleting ");
+		        return(directory.delete());
+		    }
+		   
+		   @Override
+		    public void onConfigurationChanged(Configuration newConfig) 
+		    {
+		        super.onConfigurationChanged(newConfig);
+		    }
+}

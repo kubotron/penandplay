@@ -1,0 +1,27 @@
+
+**** Build of configuration Default for project redraw ****
+
+/home/kubo/android-ndk-r9d/ndk-build 
+[armeabi-v7a] Compile++ thumb: find_frames <= find_frames.cpp
+[armeabi-v7a] SharedLibrary  : libfind_frames.so
+[armeabi-v7a] Install        : libfind_frames.so => libs/armeabi-v7a/libfind_frames.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r2.2.0.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r2.2.0.so => libs/armeabi-v7a/libnative_camera_r2.2.0.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r2.3.3.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r2.3.3.so => libs/armeabi-v7a/libnative_camera_r2.3.3.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r3.0.1.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r3.0.1.so => libs/armeabi-v7a/libnative_camera_r3.0.1.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.0.0.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.0.0.so => libs/armeabi-v7a/libnative_camera_r4.0.0.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.0.3.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.0.3.so => libs/armeabi-v7a/libnative_camera_r4.0.3.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.1.1.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.1.1.so => libs/armeabi-v7a/libnative_camera_r4.1.1.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.2.0.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.2.0.so => libs/armeabi-v7a/libnative_camera_r4.2.0.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.3.0.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.3.0.so => libs/armeabi-v7a/libnative_camera_r4.3.0.so
+[armeabi-v7a] Prebuilt       : libnative_camera_r4.4.0.so <= /home/kubo/OpenCV-2.4.9-android-sdk/sdk/native/jni/../libs/armeabi-v7a/
+[armeabi-v7a] Install        : libnative_camera_r4.4.0.so => libs/armeabi-v7a/libnative_camera_r4.4.0.so
+
+**** Build Finished ****

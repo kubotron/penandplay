@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="horizontal"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:layout_gravity="center_vertical|center_horizontal"
+	android:foregroundGravity="center"
+    >
+    <SurfaceView
+    android:id="@+id/sequence"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    />
+    	<ImageView
+            android:id="@+id/video_preview_picture"
+   			android:layout_width="fill_parent"
+    		android:layout_height="fill_parent"
+    		android:scaleType="fitCenter"
+    		android:background="@null"
+            android:src="@null" />
+<RelativeLayout
+    android:layout_height="fill_parent"
+    android:layout_width="fill_parent">
+ 
+	
+	           <ImageButton
+		        android:id="@+id/play_button"
+				android:layout_width="wrap_content"
+			    android:layout_height="wrap_content"
+			    android:layout_alignParentLeft="true"
+			     android:layout_centerVertical="true"
+			    android:layout_marginRight="2dp"
+			    android:layout_marginTop="2dp"
+			    android:layout_marginLeft="7dp"
+		        android:src="@drawable/ic_running"
+		        android:background="@null" />
+	    
+	           <ImageButton
+		        android:id="@+id/photo_button"
+		        android:layout_width="wrap_content"
+		        android:layout_height="wrap_content"
+		        android:layout_alignParentRight="true"
+		        android:layout_centerVertical="true"
+ 	            android:layout_marginRight="5dp"
+		        android:src="@drawable/ic_photo"
+		        android:background="@null" />
+
+	           <ImageButton
+		        android:id="@+id/upload_button"
+		        android:layout_width="wrap_content"
+		        android:layout_height="wrap_content"
+		        android:layout_alignParentLeft="true"
+			    android:layout_alignParentTop="true"
+			    android:layout_marginRight="2dp"
+			    android:layout_marginTop="2dp"
+		        android:src="@drawable/ic_cloud"
+		        android:background="@null" /> 
+		        <!-- 
+		        <ImageButton
+		        android:id="@+id/settings_button"
+		        android:layout_width="wrap_content"
+		        android:layout_height="wrap_content"
+		        android:layout_alignParentRight="true"
+			    android:layout_alignParentTop="true"
+			    android:layout_marginRight="2dp"
+			    android:layout_marginTop="2dp"
+		        android:src="@drawable/ic_settings"
+		        android:background="@null" />  --> 
+	    </RelativeLayout>	
+</FrameLayout>

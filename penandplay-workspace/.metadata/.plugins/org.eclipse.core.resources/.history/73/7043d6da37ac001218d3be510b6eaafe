@@ -1,0 +1,71 @@
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <android/log.h>
+#include <jni.h>
+
+using namespace cv;
+using namespace std;
+
+const char* fileName;
+
+Mat src, edges;
+Mat src_gray;
+Mat scaled_down;
+Mat scaled_src;
+Mat src_gray_smooth;
+Mat thresholded;
+Mat temp_src;
+Mat output_image;
+Mat rotated;
+Mat rotatedEdges;
+Mat scaled_down_contours;
+Mat src_equalized;
+
+int screen_width = 1280;
+int screen_height = 960;
+
+int max_trackbar = 1000;
+int p_trackbar = max_trackbar;
+
+double scale_ratio;
+double rows_scaled;
+double cols_scaled;
+
+int threshold_box_size;
+int blur_kernel_length;
+int rows_rounded;
+int cols_rounded;
+
+bool too_big = false;
+bool portrait = false;
+
+const char* frames_name = "thresh";
+
+RNG rng( 0xFFFFFFFF );
+
+
+
+
+
+void find_them_frames();
+
+extern "C" {
+JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString);
+}
+
+extern "C"  JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString)
+{
+
+    fileName = env->GetStringUTFChars(javaString, 0);
+    __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "Greetings from C");
+	__android_log_print(ANDROID_LOG_DEBUG, "Native Part", "file name: %s", fileName);
+
+	env->ReleaseStringUTFChars(javaString, fileName);
+	find_them_frames();
+   return;
+}
+
+void find_them_frames(){
+
+return;
+};

@@ -1,0 +1,508 @@
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "cv.h"
+
+using namespace cv;
+using namespace std;
+
+Mat src, dst, dilated, dilated2;
+Mat src_gray;
+Mat scaled_down;
+Mat scaled_src;
+Mat thresholded, thresholded2;
+Mat temp_src;
+Mat output_image;
+
+
+int screen_width = 1280;
+int screen_height = 960;
+
+
+double scale_ratio;
+double rows_scaled;
+double cols_scaled;
+
+int threshold_box_size;
+int blur_kernel_length;
+int rows_rounded;
+int cols_rounded;
+
+bool too_big = false;
+bool portrait = false;
+
+bool the_easy_way();
+bool the_hard_way();
+bool the_desperate_way();
+void correctPerspective();
+std::vector<cv::Point2f> sortCorners(std::vector<cv::Point> corners);
+cv::Point computeIntersect(cv::Vec4i a, cv::Vec4i b);
+vector<Point> paper_corners;
+
+
+const char* frames_name = "thresh";
+
+RNG rng( 0xFFFFFFFF );
+
+/**
+ * @function main
+ */
+int main( int, char** argv )
+{
+   /// Read the image
+   src = imread( argv[1], 1 );
+
+   if( src.empty() )
+     { std::cout  << "nope" << std::endl;
+       return -1;
+     }
+
+
+// correct portrait orientation to landscape
+  int rows1,cols1,temp_cols;
+  Size s1 = src.size();
+  rows1 = s1.height;
+  cols1 = s1.width;
+
+if (rows1>cols1){
+  	portrait = true;
+  	transpose(src, temp_src);
+	flip(temp_src, temp_src, 1);
+        temp_cols = cols1;
+        cols1 = rows1;
+        rows1 = temp_cols;
+
+  }
+  else{
+	temp_src = src;
+  }
+
+
+  if ((cols1 > screen_width)||(rows1 > screen_height)){
+	too_big = true;
+         // scale down presentation if image is too big
+	double rows1_d=rows1;
+	double screen_height_d=screen_height;
+        scale_ratio=rows1_d/screen_height_d;
+        rows_scaled = rows1/scale_ratio;
+	cols_scaled = cols1/scale_ratio;
+	rows_rounded =  (int)cvRound(rows_scaled);
+	cols_rounded =	(int)cvRound(cols_scaled);
+
+        resize( temp_src, scaled_src , Size(cols_rounded,rows_rounded), 0 , 0, CV_INTER_CUBIC );
+  }
+  else{
+        scaled_src=temp_src;
+	rows_rounded = rows1;
+	cols_rounded =cols1;
+  }
+
+//Preprocess
+   cvtColor( scaled_src, src_gray, CV_RGB2GRAY );
+   blur_kernel_length=((int)(rows_rounded/300))*2+1;
+   GaussianBlur( src_gray, src_gray, Size(  blur_kernel_length ,  blur_kernel_length ),0,0);
+
+//find paper
+   if (!(the_easy_way())){
+	if(!(the_hard_way())){
+	    if (!(the_desperate_way())){
+		   std::cout  << "giving up" << std::endl;
+
+	    }
+	}
+   }
+//correct perspective
+   correctPerspective();
+
+   std::cout  << "done" << std::endl;
+
+   waitKey(0);
+   return 0;
+}
+
+
+
+bool the_hard_way(){
+	  Vec4i h_l;
+	  Vec4i v_l;
+	  vector<Vec4i> p_lines;
+	  vector<Vec4i> long_lines;
+	  vector<Vec4i> horizontal_lines;
+	  vector<Vec4i> vertical_lines;
+
+	  int x;
+	  int y;
+	  double angle = 0.;
+	  double t_angle = 0.;
+
+	  int min_line_lenght = (int)(rows_rounded/20);
+	  int max_line_gap = (int)(rows_rounded/120);
+
+
+	Canny(src_gray, thresholded2, 50, 300, 5 );
+
+
+	int dilation_size2=1;
+	Mat element3 = getStructuringElement( MORPH_ELLIPSE,
+		                               Size( 2*dilation_size2 + 1, 2*dilation_size2+1 ),
+		                               Point( dilation_size2, dilation_size2 ));
+	dilate( thresholded2,thresholded2, element3,cv::Point(-1,-1) );
+
+	HoughLinesP( thresholded2, p_lines, 1, CV_PI/180, 30, min_line_lenght, max_line_gap );
+
+
+	unsigned nb_lines = p_lines.size();
+        unsigned all_lines = nb_lines;
+
+	for( size_t i = 0; i < p_lines.size(); i++ ){
+	       Vec4i l = p_lines[i];
+	       t_angle = atan2((double)p_lines[i][3] - p_lines[i][1],
+		               (double)p_lines[i][2] - p_lines[i][0])  * 180 / CV_PI;
+		double angle = abs(t_angle);
+
+
+		if ((angle<7)||(angle>173)){        //horizontal
+
+		Vec4i horizontal_line;
+		//discard too short horizontal lines
+		x=(l[0]-l[2]);
+		y=(l[1]-l[3]);
+			if(  (sqrt(x*x+y*y)) > (min_line_lenght*3) ){
+				horizontal_line[0]=l[0];
+				horizontal_line[1]=l[1];
+				horizontal_line[2]=l[2];
+				horizontal_line[3]=l[3];
+				horizontal_lines.push_back(horizontal_line);
+			}
+
+        	}
+
+ 		else if ((angle<104)&&(angle>76)){ //near vertical
+			Vec4i vertical_line;
+			vertical_line[0]=l[0];
+			vertical_line[1]=l[1];
+			vertical_line[2]=l[2];
+			vertical_line[3]=l[3];
+		        vertical_lines.push_back(vertical_line);
+		}
+
+	}
+
+	Vec4i top =  horizontal_lines[0];
+	Vec4i bottom = horizontal_lines[0];
+	Vec4i left = vertical_lines[0];
+	Vec4i right = vertical_lines[0];
+
+	vector<Vec4i> top_lines;
+	vector<Vec4i> bottom_lines;
+	vector<Vec4i> left_lines;
+	vector<Vec4i> right_lines;
+
+
+
+//ESTABLISH EXTREME LINES
+	  for( size_t i = 0; i < horizontal_lines.size(); i++ ){
+		  h_l = horizontal_lines[i];
+
+		if (h_l[1] > rows_rounded/2){//bottom
+			if  (h_l[1] > bottom[1]){
+				bottom = h_l;
+			}
+		}
+		else {//top lines
+			if  (h_l[1] < top[1]){
+				top = h_l;
+			}
+		}
+	}
+
+	for( size_t i = 0; i < vertical_lines.size(); i++ ){
+		v_l = vertical_lines[i];
+		if (v_l[0] > cols_rounded/2){//right
+			if  (v_l[0] > right[0]){
+				right = v_l;
+			}
+		}
+		else {//left lines
+			if  (v_l[0] < left[0]){
+				left = v_l;
+			}
+		}
+
+  	}
+
+	int n_left=0;
+	int n_right=0;
+	int n_top=0;
+	int n_bottom=0;
+
+
+	int x_left=0;
+	int x_right=0;
+	int x_top=0;
+	int x_bottom=0;
+
+	int y_left=0;
+	int y_right=0;
+	int y_top=0;
+	int y_bottom=0;
+
+
+	int x2_left=0;
+	int x2_right=0;
+	int x2_top=0;
+	int x2_bottom=0;
+
+	int y2_left=0;
+	int y2_right=0;
+	int y2_top=0;
+	int y2_bottom=0;
+
+	int tolerance = 10;
+	for( size_t i = 0; i < horizontal_lines.size(); i++ ){
+		  h_l = horizontal_lines[i];
+		if (abs(h_l[1] - bottom[1])<tolerance){//bottom
+		     bottom_lines.push_back(h_l);
+		     n_bottom++;
+		     x_bottom += h_l[0];
+		     y_bottom += h_l[1];
+		     x2_bottom += h_l[2];
+		     y2_bottom += h_l[3];
+
+		}
+		if (abs(h_l[1] - top[1])<tolerance){
+	 	     top_lines.push_back(h_l);
+		     n_top++;
+		     x_top += h_l[0];
+		     y_top += h_l[1];
+		     x2_top += h_l[2];
+		     y2_top += h_l[3];
+
+		}
+	}
+ 	for( size_t i = 0; i < vertical_lines.size(); i++ ){
+		v_l = vertical_lines[i];
+		if (abs(v_l[0] - right[0])<tolerance){//right
+		     right_lines.push_back(v_l);
+		     n_right++;
+		     x_right += h_l[0];
+		     y_right += h_l[1];
+		     x2_right += h_l[2];
+		     y2_right += h_l[3];
+		}
+
+		if (abs(v_l[0] - left[0])<tolerance){
+		     left_lines.push_back(v_l);
+	             n_left++;
+		     x_left += h_l[0];
+		     y_left += h_l[1];
+		     x2_left += h_l[2];
+		     y2_left += h_l[3];
+		}
+
+	}
+
+	//averaghe the lines
+	if ((n_top==0) || (n_bottom==0) || (n_left ==0) || (n_right==0)){
+	return false;
+	}
+	Vec4i top_line = Vec4i( x_top/n_top , y_top/n_top, x2_top/n_top, y2_top/n_top );
+	Vec4i bottom_line = Vec4i( x_bottom/n_bottom , y_bottom/n_bottom, x2_bottom/n_bottom, y2_bottom/n_bottom );
+	Vec4i left_line =Vec4i( x_left/n_left , y_left/n_left, x2_left/n_left, y2_left/n_left );
+	Vec4i right_line = Vec4i( x_right/n_right , y_right/n_right, x2_right/n_right, y2_right/n_right );
+
+     // line( scaled_src, Point(top_line[0], top_line[1]), Point(top_line[2], top_line[3]), Scalar(0,0,255), 3, CV_AA);
+
+	imshow ("thresh",scaled_src);
+
+	Point tl, tr, bl, br;
+	tl =  computeIntersect(top_line, left_line);
+	tr =   computeIntersect(top_line, right_line);
+	bl =  computeIntersect(bottom_line, left_line);
+	br =   computeIntersect(bottom_line, right_line);
+
+	paper_corners.clear();
+	paper_corners.push_back(tl);
+	paper_corners.push_back(tr);
+	paper_corners.push_back(bl);
+	paper_corners.push_back(br);
+
+
+	std::cout  << "hard" << std::endl;
+	return true;
+}
+
+
+
+bool the_easy_way(){
+	vector<vector<Point> > contours;
+	vector<Point>  approxCurve;
+	vector<Vec4i> hierarchy;
+	Mat cnt;
+
+	int erosion_size=2;
+	Mat element = getStructuringElement( MORPH_ELLIPSE,
+                                       Size( 2*erosion_size + 1, 2*erosion_size+1 ),
+                                       Point( erosion_size, erosion_size ));
+
+	dilate(src_gray,dilated, element,cv::Point(-1,-1) );
+
+        Canny( dilated, thresholded, 400, 1000, 5 );
+
+
+	int dilation_size=1;
+	Mat element2 = getStructuringElement( MORPH_ELLIPSE,
+		                               Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+		                               Point( dilation_size, dilation_size ));
+	dilate( thresholded,thresholded, element2,cv::Point(-1,-1) );
+
+	findContours(thresholded, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+
+	int largest_area=0;
+  	int second_largest_area=0;
+	int largest_idx=0;
+	int second_largest_idx=0;
+	int total_area = rows_rounded*cols_rounded;
+	int paper_contour_idx = 0;
+
+        if ( !contours.empty() && !hierarchy.empty() ) {
+
+	        for ( int i=0; i<contours.size(); i++ ) {
+			int area =  contourArea(contours[i]) ;
+			if(area > second_largest_area){
+				if ( area > largest_area){
+				largest_area = area;
+				largest_idx = i;
+				}
+				else{
+				second_largest_area = area;
+				second_largest_idx = i;
+				}
+
+		}
+         }
+     //couple of checks
+     if (second_largest_area < (0.4*total_area)){
+	if (largest_area >= (0.4*total_area)){
+		if (largest_area > (0.97*total_area)){
+		cout << "too large" << endl;
+		return false;
+		}
+		else{
+		paper_contour_idx = largest_idx;
+		}
+	}
+	else{
+	cout << "too smal" << endl;
+	return false;
+	}
+     }
+     else {
+	if (second_largest_area > (0.97*total_area)){
+	cout << "too large" << endl;
+	return false;
+	}
+	else{
+	paper_contour_idx= second_largest_idx;
+	}
+     }
+
+	cnt = Mat(contours[paper_contour_idx]);
+        approxPolyDP(cnt, approxCurve, arcLength(cnt,true)*0.05, true);
+	if (!(approxCurve.size()==4)){
+		cout << "not 4 nodes" << endl;
+		return false;
+	}
+	paper_corners = approxCurve;
+	eturn true;
+}
+
+bool the_desperate_way(){
+std::cout  << "desperate" << std::endl;
+return false;
+}
+
+std::vector<cv::Point2f> sortCorners(std::vector<cv::Point> corners){
+	std::vector<cv::Point> top, bot;
+	cv::Point center;
+	std::vector<cv::Point2f> result;
+
+	for (int i = 0; i < corners.size(); i++){
+  		center += corners[i];
+	}
+	center *= (1. / corners.size());
+
+
+	for (int i = 0; i < corners.size(); i++)
+	{
+		if (corners[i].y < center.y){
+		top.push_back(corners[i]);}
+		else{
+		bot.push_back(corners[i]);}
+	}
+
+	cv::Point tl = top[0].x > top[1].x ? top[1] : top[0];
+	cv::Point tr = top[0].x > top[1].x ? top[0] : top[1];
+	cv::Point bl = bot[0].x > bot[1].x ? bot[1] : bot[0];
+	cv::Point br = bot[0].x > bot[1].x ? bot[0] : bot[1];
+
+	result.push_back(tl);
+	result.push_back(tr);
+	result.push_back(br);
+	result.push_back(bl);
+
+	return result;
+
+}
+
+
+
+void correctPerspective(){
+	vector<Point2f>  paper_corners2f;
+	if(!paper_corners.empty()){
+		 paper_corners2f = sortCorners(paper_corners);
+	}
+
+	cv::Mat quad = cv::Mat::zeros(rows_rounded, cols_rounded, CV_8UC3);
+
+	std::vector<cv::Point2f> quad_pts;
+	quad_pts.push_back(cv::Point2f(0, 0));
+	quad_pts.push_back(cv::Point2f(quad.cols, 0));
+	quad_pts.push_back(cv::Point2f(quad.cols, quad.rows));
+	quad_pts.push_back(cv::Point2f(0, quad.rows));
+
+	cv::Mat transmtx = cv::getPerspectiveTransform(paper_corners2f, quad_pts);
+	cv::warpPerspective(scaled_src, output_image, transmtx, quad.size());
+	imshow( "corners", scaled_src);
+	imshow("result",output_image);
+	return;
+}
+
+
+Point computeIntersect(cv::Vec4i a, cv::Vec4i b){
+	int x1 = a[0], y1 = a[1], x2 = a[2], y2 = a[3], x3 = b[0], y3 = b[1], x4 = b[2], y4 = b[3];
+	float denom;
+
+	if (float d = ((float)(x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4)))
+	{
+		cv::Point pt;
+		pt.x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / d;
+		pt.y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / d;
+		return pt;
+	}
+	else{
+	return cv::Point(-1, -1);}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

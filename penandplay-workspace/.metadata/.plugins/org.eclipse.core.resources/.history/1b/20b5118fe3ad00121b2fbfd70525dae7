@@ -1,0 +1,127 @@
+package org.opencv.redraw;
+
+
+import java.io.FileOutputStream;
+import java.util.List;
+
+import org.opencv.android.JavaCameraView;
+
+import android.content.Context;
+
+import android.hardware.Camera;
+import android.hardware.Camera.PictureCallback;
+import android.hardware.Camera.Size;
+import android.os.AsyncTask;
+import android.util.AttributeSet;
+import android.util.Log;
+
+public class RedRawView extends JavaCameraView  {
+
+  private static final String TAG = "RedRawView";
+
+
+  public RedRawView(Context context, AttributeSet attrs) {
+    super(context, attrs);
+	 Log.e(TAG, "Cheers from redrawview");
+
+  }
+
+  public List<String> getEffectList() {
+    return mCamera.getParameters().getSupportedColorEffects();
+  }
+
+  public boolean isEffectSupported() {
+    return (mCamera.getParameters().getColorEffect() != null);
+  }
+
+  public String getEffect() {
+    return mCamera.getParameters().getColorEffect();
+  }
+
+  public void setEffect(String effect) {
+    Camera.Parameters params = mCamera.getParameters();
+    params.setColorEffect(effect);
+    mCamera.setParameters(params);
+  }
+
+  public List<Size> getResolutionList() {
+    return mCamera.getParameters().getSupportedPreviewSizes();
+  }
+
+  public void setResolution(Size resolution) {
+    disconnectCamera();
+    mMaxHeight = resolution.height;
+    mMaxWidth = resolution.width;
+    connectCamera(getWidth(), getHeight());
+  }
+
+  public Size getResolution() {
+    return mCamera.getParameters().getPreviewSize();
+  }
+///
+  protected String mPictureFileName;
+  
+  public void takePicture(final String fileName) {
+
+	  Log.i(TAG, "take Picture " + fileName);
+	  mPictureFileName = fileName;
+	  mCamera.takePicture(null, null, callback);
+	  
+  }
+  
+  final PictureCallback callback = new PictureCallback() {
+	    @Override
+	    public void onPictureTaken(byte[] data, Camera camera) {
+	        try {
+	            //async task for storing the photo
+	            new SavePhotoTask().execute();
+	        } catch (final Exception e) {
+	            //some exceptionhandling
+	        }
+	    }
+	};
+  
+  private class SavePhotoTask
+  extends AsyncTask<Void, Void, Void> 
+  {
+
+private String mPictureFileName;
+	  
+  @Override
+  protected void onPreExecute() {       
+	  Log.i(TAG, "pre-execute-ASYNC");
+  }
+
+  @Override
+protected Void doInBackground(Void... params) {   
+	  //File file = null;
+      Log.i(TAG, "do In Background");
+      try {
+//        FileOutputStream fos = new FileOutputStream(mPictureFileName);
+      	  FileOutputStream fos = new FileOutputStream("/mnt/sdcard/RedRaw/test_pic.jpg");
+
+        fos.write(data);
+        fos.close();
+        Log.i(TAG, "OK file /mnt/sdcard/RedRaw/test_pic.jpg written" );
+    } catch (final Exception e) {
+  	  Log.i(TAG, "oops file saving failed" );
+    }
+     
+      return null;
+//      return file;
+      //this.camera.takePicture(null, null, this);
+      //return this.spot.getPhoto();
+  }
+
+  @Override
+  protected void onPostExecute(Void success) {
+	
+      Log.i(TAG, "Post execute");
+      mCamera.startPreview();
+      return;
+  }
+  
+
+}
+
+ } 

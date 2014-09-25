@@ -1,0 +1,11 @@
+21:12:44 **** Build of configuration Default for project penandplay ****
+/home/kubo/android-ndk-r9d/ndk-build 
+[armeabi-v7a] Install        : libfind_frames.so => libs/armeabi-v7a/libfind_frames.so
+[armeabi-v7a] Install        : liboggJNI.so => libs/armeabi-v7a/liboggJNI.so
+[armeabi-v7a] Install        : libvorbisJNI.so => libs/armeabi-v7a/libvorbisJNI.so
+[armeabi-v7a] Install        : libvpx.so => libs/armeabi-v7a/libvpx.so
+[armeabi-v7a] Install        : libvpxJNI.so => libs/armeabi-v7a/libvpxJNI.so
+[armeabi-v7a] Install        : libwebmJNI.so => libs/armeabi-v7a/libwebmJNI.so
+
+21:12:44 Build Finished (took 676ms)
+

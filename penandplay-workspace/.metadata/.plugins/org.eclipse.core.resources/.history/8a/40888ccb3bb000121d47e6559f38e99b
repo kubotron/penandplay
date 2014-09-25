@@ -1,0 +1,85 @@
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <android/log.h>
+#include <jni.h>
+#include <string>
+
+using namespace cv;
+using std::string;
+
+Mat src;
+//string SfileName;
+
+const char* SfileName;
+
+
+//void findFrames(const char*);
+void findFrames(char*);
+
+extern "C" {
+JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString);
+}
+
+extern "C"  JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString)
+{
+	const char* fileName;
+    fileName = env->GetStringUTFChars(javaString, 0);
+    __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "file name: %s", fileName);
+
+
+/*
+	   FILE* img = NULL;
+	   img = fopen(fileName,"r");
+	   if (img == NULL)
+	   {
+		   __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "fopen can't load %s", fileName);
+
+	   }
+	   else{
+		   		   __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "fopen CAN load %s", fileName);
+
+	   }
+	   fclose (img);
+	   */
+
+    const char* SfileName = fileName;
+	cv::Mat src = cv::imread(SfileName, 1);
+
+		//   cv::Mat src = cv::imread("/mnt/sdcard/RedRaw/test_picture.jpg", 1);
+		   if( src.empty() )
+		     {	 __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "imread can't load %s", SfileName);
+		     	 return;
+		     }
+		   else{
+		   __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "Ok image %s opened", SfileName);
+		   }
+
+
+	//findFrames(fileName);
+	__android_log_print(ANDROID_LOG_DEBUG, "Native Part", "finished");
+
+	env->ReleaseStringUTFChars(javaString, fileName);
+   return;
+}
+
+void findFrames(char* fileName){
+	 //__android_log_print(ANDROID_LOG_DEBUG, "Native Part", "passed file name is  %s", file );
+
+
+
+	   /*cv::Mat src = cv::imread(MyFileName, 1);
+
+	//   cv::Mat src = cv::imread("/mnt/sdcard/RedRaw/test_picture.jpg", 1);
+	   if( src.empty() )
+	     {	 __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "imread can't load %s", fileName);
+	     	 return;
+	     }
+	   else{
+	   __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "Ok image %s opened", fileName);
+	   }
+       //blur(src,src);
+*/
+return;
+}
+
+

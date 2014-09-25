@@ -1,0 +1,641 @@
+package com.penandplay;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import com.google.libvpx.LibVpxEnc;
+import com.google.libvpx.LibVpxEncConfig;
+import com.google.libvpx.LibVpxException;
+import com.google.libvpx.Rational;
+import com.google.libvpx.VpxCodecCxPkt;
+import com.google.libwebm.mkvmuxer.MkvWriter;
+import com.google.libwebm.mkvmuxer.Segment;
+import com.google.libwebm.mkvmuxer.SegmentInfo;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.os.Bundle;
+import android.os.Handler;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnTouchListener;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import android.view.animation.RotateAnimation;
+import android.widget.ImageButton;
+
+
+public class DisplaySequenceActivity extends Activity implements SurfaceHolder.Callback, OnTouchListener{
+		
+	private static int timer =0;
+	private final static Object timerlock=new Object();
+	public final static Object pauselock=new Object();
+	public final static Object uploadlock=new Object();
+
+	
+	private static double fps = 12;
+	public double interval;
+	public int hide_time = 3; //seconds to hide controls
+	public int limit=(int)Math.round(hide_time*fps);
+	public int new_hide_time = 10;
+	
+	private ScreenUpdater upd;
+	private static final String TAG = "DisplaySequence";
+	private String directory; 
+	private ArrayList<File> all_files;
+	private File[] ordered_files;
+	int width;
+	int height;
+	//public String fileName;
+	public float framerate;
+	private Thread t = null;
+	private Thread et = null;
+	private VideoEncoder encoder;
+	private File parentDir;
+	private File[] files;
+	private ImageButton playButton;
+	private ImageButton photoButton;
+	private ImageButton uploadButton;
+	private OnClickListener playListener;
+	private OnClickListener uploadListener;
+	private OnClickListener photoListener;
+	private static boolean paused=false;
+	private static boolean hidden=false;
+	private static boolean encoding=false;
+	
+	
+	private Animation hanim;
+	private Animation uhanim;
+	private RotateAnimation ranim;
+	
+	private final Handler handler = new Handler();
+	
+	private SurfaceView sSurfaceView;
+	private SurfaceHolder sHolder;
+	public Canvas canvas;	
+	 Paint paint;
+	
+	 public DisplaySequenceActivity() {
+		
+		
+		paint= new Paint(Paint.FILTER_BITMAP_FLAG |
+		                    Paint.DITHER_FLAG |
+		                    Paint.ANTI_ALIAS_FLAG);
+	        Log.i(TAG, "new " + this.getClass());
+	    	    }
+	 
+	    /** Called when the activity is first created. */
+	    @SuppressLint("NewApi")
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {
+	    
+
+	    	super.onCreate(savedInstanceState);
+	    	upd = new ScreenUpdater();
+	    	encoder = new VideoEncoder();
+	    	et = new Thread(encoder);
+	    	
+	    	//open xmls and save to sd card for native access 
+	    	Log.i(TAG, "display sequence activity created ");
+
+	    	setContentView(R.layout.redraw_sequence_view);
+	        Log.i(TAG, "set content view");
+
+	    	
+	    	sSurfaceView = (SurfaceView)findViewById(R.id.sequence);
+	    	Log.i(TAG, "sequence layout set " + this.getClass());
+
+	    	sHolder = sSurfaceView.getHolder();
+			Log.i(TAG, "Surface Holder instantiated");
+		    sHolder.addCallback(this);
+		    Log.i(TAG, "Surface Holder Callback set");
+		    sSurfaceView.setOnTouchListener(this); 
+
+		   
+
+		    
+		    playButton=(ImageButton)findViewById(R.id.play_button);
+	        photoButton=(ImageButton)findViewById(R.id.photo_button);
+	        uploadButton=(ImageButton)findViewById(R.id.upload_button);
+	        hanim = AnimationUtils.loadAnimation(getBaseContext(), R.anim.hidecontrols);
+	        uhanim = AnimationUtils.loadAnimation(getBaseContext(), R.anim.unhidecontrols);
+	        ranim = (RotateAnimation)AnimationUtils.loadAnimation(getBaseContext(), R.anim.rotate);
+
+	        
+	        playListener = new OnClickListener(){
+	            public void onClick(View v)
+	            {   if (paused){//TODO play pause 
+	            	 	paused=false;
+	            	 	Log.i(TAG, "playing ");
+	            		playButton.setImageResource(R.drawable.ic_cancel_icon);
+	            		synchronized(pauselock){
+		            	 	Log.i(TAG, "notifying ");
+
+		            	 	pauselock.notify();
+	            			Log.i(TAG, "notified ");
+	            		}
+	            		limit=(int)Math.round(hide_time*fps);	
+	            	}else{
+	            	 	paused=true;
+	            	 	Log.i(TAG, "button paused ");
+	            		playButton.setImageResource(R.drawable.ic_play);
+	            		
+	            	}
+	            	
+	            }
+	        };
+	        
+	        uploadListener = new OnClickListener(){
+	            public void onClick(View v)
+	            { 
+	            	synchronized(uploadlock){
+	            		encoding=true;
+	            		uploadButton.clearAnimation();
+	            	    uploadButton.setAnimation(ranim);
+	        		    uploadButton.setOnClickListener(null);
+	            		
+	            	}
+	            		
+	       	            Log.i(TAG, "starting encoder");
+	       	            et.start();
+	            	
+	            }
+	        };
+	        
+	        
+	       photoListener = new OnClickListener(){
+	            public void onClick(View v)
+	            {          Intent capture_intent = new Intent(getBaseContext(), RedRawActivity.class);
+	            			capture_intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+	            			startActivity(capture_intent);
+	            }
+	        };
+	        photoButton.setOnClickListener(photoListener); 
+	        playButton.setOnClickListener(playListener); 
+	        uploadButton.setOnClickListener(uploadListener);
+
+	        
+		    
+	    	Intent intent = getIntent(); // gets the previously created intent
+	        directory = intent.getStringExtra("directory");
+	       //fileName = intent.getStringExtra("image");
+		    	        
+
+
+	         Log.i(TAG, "Image directory " + directory);
+	    		        
+		        parentDir = new File(directory);
+		    	all_files=new ArrayList<File>();
+
+		        
+		        if(parentDir.exists()){
+			        Log.i(TAG, parentDir +" exists");
+
+		            files = parentDir.listFiles();
+			        Log.i(TAG, files.length+" files listed " );
+
+		            if(null!=files){
+
+		                for(int i=0; i<files.length; i++) {
+            			    Log.d(TAG,"checking "+ files[i].getName());
+
+		                	
+		                    if(files[i].isDirectory()) {
+		                    }
+		                    else {
+		                 		if(files[i].getName().endsWith(".png")){
+		                    				all_files.add(files[i]);
+		                    			    Log.d(TAG,"adding  "+ files[i].getName());
+		                   		}
+		                  
+		                    }
+		                }
+		            }
+		        }
+		        
+		        ordered_files = new File[ all_files.size() ];
+		        all_files.toArray( ordered_files );
+		        //Log.i(TAG, "files listed");
+		        Arrays.sort(ordered_files);
+		        Log.i(TAG, "files sorted");
+		       /* for(int j=0; j<ordered_files.length; j++){
+		        	 Log.i(TAG, "files sorted");
+		        }*/
+		        
+		        
+	    }
+	     
+	    @SuppressLint("NewApi")
+		
+		@Override
+	    public void onStart()
+	    {   super.onStart();
+    		Log.i(TAG, "onStart Called" );	    
+    	
+	        
+	    }
+	
+	    @Override
+	    public void onBackPressed() {
+	            super.onBackPressed();
+		      	
+	          this.finish();
+	    }
+	    
+	    @Override
+	    public void onResume()
+	    {   super.onResume();
+	    	Log.i(TAG, "onResume Called" );
+	    	
+	    	t = new Thread(upd);
+	    	upd.running = true;
+		    t.start();
+	    }
+	    @Override
+	    public void onPause()
+	    {
+	    	super.onPause();
+	      	Log.i(TAG,"onPause event"); 
+	     	upd.running = false;
+	      	Log.i(TAG,"running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.i(TAG,"paused"); 
+	    }
+	    
+	    @Override
+	    public void onDestroy() {
+	        //deleteDirectory(parentDir);
+	        super.onDestroy();
+	      	Log.i(TAG,"onDestroy event"); 
+	     	upd.running = false;
+	      	Log.i(TAG,"set running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.i(TAG,"paused"); 
+	    }
+
+	 
+
+		@Override
+		public void surfaceChanged(SurfaceHolder holder, int format, int width,
+				int height) {
+			// TODO Auto-generated method stub
+		
+
+			
+		}
+
+		@Override
+		public void surfaceCreated(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void surfaceDestroyed(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+			if(t == null){
+			upd.running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+			}
+		}
+
+
+		private class ScreenUpdater implements Runnable{
+			private long startTime;
+			private long estimatedTime;
+			private long waittime;
+			private double est;
+			
+			public boolean running = false;
+
+					
+			@Override
+			public void run() {
+				interval = 1/fps;
+				 Log.i(TAG,"framerate " + fps +" fps, limit " + limit  + " frames, interval " +interval +"sec" );
+		    	Display display = getWindowManager().getDefaultDisplay();
+		    	Point size = new Point();
+		    	width = display.getWidth();  // deprecated
+		    	height = display.getHeight();  // deprecated
+		    	if (height>width){
+		    		Log.i(TAG, "portrait orinetation?" );
+		    		height= display.getWidth();  // deprecated
+		    		width = display.getHeight();  // deprecated
+			    		
+		    	}
+		    	 //pauselock = new Object();
+		    	/*display.getSize(size); //API 13 doesnt work on xperia active 2.3.4.
+		    	width = size.x;
+		    	height = size.y;*/
+		        Log.i(TAG, "width: "+width+", height: " + height );
+		
+		        ArrayList<Bitmap> bitmapArray = new ArrayList<Bitmap>();
+
+				for (File file : ordered_files) {
+						String filename = directory+File.separator+file.getName();
+						Log.i(TAG, "png Image " + filename);
+						Bitmap fullSize = BitmapFactory.decodeFile(filename);
+		
+
+						Bitmap bitmap = Bitmap.createScaledBitmap (fullSize,width, height, true);
+			
+						bitmapArray.add(bitmap);
+						Log.i(TAG, "added");
+				}
+				Log.i(TAG, "start running");
+				int inter= (int) Math.round(interval*1000);
+				Log.i(TAG, "inter frame time " + inter + " ms" );
+				
+				while (running){
+					for (Bitmap image : bitmapArray) {
+							if(!paused){
+								startTime = System.nanoTime();
+								synchronized(timerlock){
+									if(timer==0 && hidden){
+										handler.post(unhide_ctrls);
+										
+									}
+									timer++;	
+									if((timer>limit)&&!hidden){
+										handler.post(hide_ctrls);
+										hidden=true;
+									}
+								}	
+								    
+								
+								canvas = null;
+								try {
+									//Log.i(TAG, "locking canvas");
+									canvas = sHolder.lockCanvas(null);
+									canvas.drawColor(Color.WHITE);
+									synchronized (sHolder) {
+										if(canvas==null){
+											Log.i(TAG, "WTF canvas null");
+										}
+										canvas.drawBitmap(image, 0, 0, paint);
+										//Log.i(TAG, "drawing bitmap DONE ");
+	
+									}
+								}
+								catch(Exception e ){
+									Log.i(TAG, "NOPE " + e);
+									
+								} finally {
+									// do this in a finally so that if an exception is thrown
+									// during the above, we don't leave the Surface in an
+									// inconsistent state
+									if (canvas != null) {
+										sHolder.unlockCanvasAndPost(canvas);
+									}
+								}
+								 estimatedTime = System.nanoTime() - startTime;
+								 est = estimatedTime/1000000;
+								 waittime = (long)(inter-est);
+								 if(waittime>0){
+									 	try {	 		
+									 		Thread.sleep(waittime);
+									 	} catch (InterruptedException e) {
+	
+									 		e.printStackTrace();
+									 	}
+								 }else{
+										Log.i(TAG, "cannot perform at the requested framerate" );
+								 }
+							}else{//paused							
+								try {
+									synchronized(pauselock){			
+										pauselock.wait();
+										Log.i(TAG, "thread started");
+									}							
+								} catch (InterruptedException e1) {
+									// TODO Auto-generated catch block
+								}
+								
+								
+							}
+					          
+						}
+					}
+				
+			}
+			
+		}
+		
+		private class VideoEncoder implements Runnable{
+		
+			 /*
+			   * This function will encode an int array to a video WebM file. |webmOutputName| filename of the
+			   * WebM file to write to. |srcFrame| is source frame to convert and encode multiple times.
+			   * |fourcc| LibVpxEnc fourcc of the source. |width| width of the source. |height| height of the
+			   * source. |rate| fps numerator of the output WebM. |scale| fps denominator of the output WebM.
+			   * |framesToEncode| is the number of video frames to encode before stopping. Returns "Success!"
+			   * on success, an error string otherwise.
+			   */
+			  public String testVideoConvertEncode(String webmOutputName,
+			      int[] srcFrame, long fourcc, int width, int height, int rate, int scale,
+			      int framesToEncode) {
+			    LibVpxEncConfig encoderConfig = null;
+			    LibVpxEnc encoder = null;
+			    MkvWriter mkvWriter = null;
+
+			    try {
+			      encoderConfig = new LibVpxEncConfig(width, height);
+			      encoder = new LibVpxEnc(encoderConfig);
+
+			      // libwebm expects nanosecond units
+			      encoderConfig.setTimebase(1, 1000000000);
+			      Rational timeBase = encoderConfig.getTimebase();
+			      Rational frameRate = new Rational(rate, scale);
+			      Rational timeMultiplier = timeBase.multiply(frameRate).reciprocal();
+			      int framesIn = 1;
+
+			      mkvWriter = new MkvWriter();
+			      if (!mkvWriter.open(webmOutputName)) {
+			        return new String("WebM Output name is invalid or error while opening.");
+			      }
+
+			      Segment muxerSegment = new Segment();
+			      if (!muxerSegment.init(mkvWriter)) {
+			        return new String("Could not initialize muxer segment.");
+			      }
+
+			      SegmentInfo muxerSegmentInfo = muxerSegment.getSegmentInfo();
+			      muxerSegmentInfo.setWritingApp("y4mEncodeSample");
+
+			      long newVideoTrackNumber = muxerSegment.addVideoTrack(width, height, 0);
+			      if (newVideoTrackNumber == 0) {
+			        return new String("Could not add video track.");
+			      }
+
+			      while (framesIn < framesToEncode) {
+			        long frameStart = timeMultiplier.multiply(framesIn - 1).toLong();
+			        long nextFrameStart = timeMultiplier.multiply(framesIn).toLong();
+
+			        ArrayList<VpxCodecCxPkt> encPkt = encoder.convertIntEncodeFrame(
+			            srcFrame, frameStart, nextFrameStart - frameStart, fourcc);
+			        for (int i = 0; i < encPkt.size(); i++) {
+			          VpxCodecCxPkt pkt = encPkt.get(i);
+			          final boolean isKey = (pkt.flags & 0x1) == 1;
+
+			          if (!muxerSegment.addFrame(pkt.buffer, newVideoTrackNumber, pkt.pts, isKey)) {
+			            return new String("Could not add frame.");
+			          }
+			        }
+
+			        ++framesIn;
+			      }
+
+			      if (!muxerSegment.finalizeSegment()) {
+			        return new String("Finalization of segment failed.");
+			      }
+
+			    } catch (LibVpxException e) {
+			      return new String("Encoder error : " + e);
+			    } finally {
+			      if (encoder != null) {
+			        encoder.close();
+			      }
+			      if (encoderConfig != null) {
+			        encoderConfig.close();
+			      }
+			      if (mkvWriter != null) {
+			        mkvWriter.close();
+			      }
+			    }
+
+			    return new String("Success!");
+			  }
+
+			
+			
+			@Override
+			public void run() {
+				Log.i(TAG, "encoding" );
+						
+				testVideoConvertEncode("/sdcard/Pencilation/test.webm",
+					      int[] srcFrame, long fourcc, int width, int height, int rate, int scale,
+					      int framesToEncode) ;
+				
+				
+				uploadButton.clearAnimation();
+	    		uploadButton.setOnClickListener(uploadListener);
+				encoding=false;
+				Log.i(TAG, "encoding done" );
+		    	
+				
+			}
+			
+			
+		}
+		
+		final Runnable hide_ctrls = new Runnable() {
+			   public void run() {
+				   hide_controls();
+			   }
+			};
+
+		final Runnable unhide_ctrls = new Runnable() {
+				   public void run() {
+					   unhide_controls();
+				   }
+				};
+			
+		private void hide_controls(){
+			Log.i(TAG, "hiding buttons" );
+			   photoButton.startAnimation(hanim); 
+		       playButton.startAnimation(hanim); 
+		       uploadButton.startAnimation(hanim);
+		       uploadButton.setOnClickListener(null);
+			   photoButton.setOnClickListener(null); 
+		       playButton.setOnClickListener(null); 
+		        
+
+		}
+		
+
+		private void unhide_controls(){
+			Log.i(TAG, "unhiding buttons" );
+				uploadButton.startAnimation(uhanim);
+				photoButton.startAnimation(uhanim); 
+				playButton.startAnimation(uhanim); 
+				uploadButton.setOnClickListener(uploadListener);
+				photoButton.setOnClickListener(photoListener); 
+			    playButton.setOnClickListener(playListener); 
+
+		}
+
+
+		@Override
+		   public boolean onTouch(View arg0, MotionEvent event) {
+			// TODO Auto-generated method stub
+			limit=(int)Math.round(new_hide_time*fps);
+			synchronized(timerlock){timer=0;}
+			Log.i(TAG, "reset timer ");
+			return false;
+		}
+	    
+		   private boolean deleteDirectory(File directory) {
+		        if(directory.exists()){
+		            File[] files = directory.listFiles();
+		            if(null!=files){
+		                for(int i=0; i<files.length; i++) {
+		                    if(files[i].isDirectory()) {
+		                        deleteDirectory(files[i]);
+		                    }
+		                    else {
+		                        files[i].delete();
+		                    }
+		                }
+		            }
+		        }
+		        Log.d(TAG,"deleting ");
+		        return(directory.delete());
+		    }
+		   
+		   @Override
+		    public void onConfigurationChanged(Configuration newConfig) 
+		    {
+		        super.onConfigurationChanged(newConfig);
+		    }
+}

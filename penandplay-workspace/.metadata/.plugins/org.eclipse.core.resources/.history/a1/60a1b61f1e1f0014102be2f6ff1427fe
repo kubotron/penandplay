@@ -1,0 +1,146 @@
+package com.penandplay;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map.Entry;
+import java.util.TreeMap;
+
+import android.graphics.Bitmap;
+import android.os.Debug;
+import android.util.Log;
+
+public class BitmapManager {
+	//TODO change hash map to thread safe concurrent hashmap
+	//TODO change length, force some minimal playback duration through layer with n null bitmaps 
+		public static int longestLayer =0;
+		private static String TAG = "BitmapManager";
+		private static Object lock = new Object();
+	 	private static boolean loop = true;
+	 	 			
+	 	
+		public static  HashMap<Integer,HashMap<Integer,Bitmap>> numbered_bitmaps = new HashMap<Integer,HashMap<Integer,Bitmap>>();
+		private static HashMap<Integer,ArrayList<Bitmap>> ordered_bitmaps = new HashMap<Integer,ArrayList<Bitmap>>();
+		public static HashMap<Integer,ArrayList<Bitmap>> playback_bitmaps = new HashMap<Integer,ArrayList<Bitmap>>();
+		public static  HashMap<Integer,String> loop_preferences =   new HashMap<Integer,String>();
+		
+
+		// Private constructor prevents instantiation from other classes
+		private BitmapManager() {//Debug.startMethodTracing("logname"); 
+			
+		}
+	 
+		/**
+		* SingletonHolder is loaded on the first execution of Singleton.getInstance() 
+		* or the first access to SingletonHolder.INSTANCE, not before.
+		*/
+		private static class BitmapManagerHolder { 
+			private static final BitmapManager  INSTANCE = new BitmapManager ();
+		}
+	 
+		public static BitmapManager  getInstance() {
+			return BitmapManagerHolder.INSTANCE;
+		}
+	
+		public static void ReorderBitmaps(ArrayList<Integer> numbers){
+			System.gc();
+			//TODO guess numbers if just 1 or 2 are off 
+			synchronized(lock){
+		  		Log.i(TAG,"reordering ,got lock");	
+
+				TreeMap<Integer,Bitmap> presorted = new TreeMap<Integer,Bitmap>();
+				TreeMap<Integer,Bitmap> fixed = new TreeMap<Integer,Bitmap>();
+				ArrayList<Bitmap> finalized = new ArrayList<Bitmap>();
+				int groupnr=0;
+				for(int nr : numbers){
+					HashMap<Integer,Bitmap> numbered = numbered_bitmaps.get(nr);
+					for(Entry<Integer,Bitmap> entry : numbered.entrySet()) {
+					    Integer key = entry.getKey();
+					    Bitmap value = entry.getValue();
+					    if(key>=1000){//written framenumber, gets special treatment later
+					    	int newkey = (key-1000);	
+					    	fixed.put(newkey,value);
+					    }else{//interpolated number, will be sorted first
+					    	int newkey = key + 1000*nr;
+					    	presorted.put(newkey,value);
+					    }
+					}	  
+					groupnr = nr;
+					numbered_bitmaps.remove(nr);	
+				}
+				for(int pnr : presorted.keySet()){
+					finalized.add(presorted.get(pnr));					
+				}
+				for(int fnr : fixed.keySet()){
+					finalized.add(fnr,fixed.get(fnr));				
+				}
+				if (finalized.size()>=longestLayer){
+					longestLayer=finalized.size();	
+				}
+				loop_preferences.put(groupnr, "LOOP");//TODO get loop preferences
+				ordered_bitmaps.put(groupnr, finalized);
+				for (Bitmap b : presorted.values()){
+					b=null;
+				}
+				presorted=null;
+				for (Bitmap b : fixed.values()){
+					b=null;
+				}
+				fixed=null;
+				for (Bitmap b : finalized){
+					b=null;
+				}
+				finalized=null;
+				Log.i(TAG,"generating playback btms, length " + longestLayer);	
+				generatePlaybackBitmaps();
+			}
+			System.gc();
+	  		Log.i(TAG,"reordered");	
+		}
+		
+		public static ArrayList<Bitmap> getGroup(int gr){
+			synchronized(lock){
+				return ordered_bitmaps.get(gr);
+			}
+		}
+		
+		public static HashMap<Integer,ArrayList<Bitmap>> getAllGroups(){
+					return playback_bitmaps;
+		}
+		
+		
+		private static void generatePlaybackBitmaps(){
+			
+				for(Integer key : ordered_bitmaps.keySet()) {
+					ArrayList<Bitmap> original_layer = ordered_bitmaps.get(key);
+					ArrayList<Bitmap> playback_layer = new ArrayList<Bitmap>(longestLayer);
+					if(loop_preferences.get(key).equals("LOOP")){
+						if(original_layer.size()==longestLayer){
+							playback_layer=original_layer;						
+						}else if(original_layer.size()>longestLayer){
+							longestLayer=original_layer.size();
+							int i =0;
+							while(i<=playback_layer.size()){
+								for (Bitmap b : original_layer){							
+									playback_layer.add(i,b);
+									i++;
+								}
+							}
+						}
+						
+					}
+					for (Bitmap b : ordered_bitmaps.get(key) ){
+						b=null;
+					}
+					ordered_bitmaps.remove(key);
+				}
+				for(Integer key : playback_bitmaps.keySet()) {
+			  		Log.i(TAG,"length: " + playback_bitmaps.get(key).size());	
+
+				}
+				System.gc();
+				//ordered_bitmaps=null;
+			
+			//TODO respect the playback settings to loop/clip/mirrorloop/
+		}
+	
+}

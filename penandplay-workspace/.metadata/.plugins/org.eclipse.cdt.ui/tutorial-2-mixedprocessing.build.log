@@ -1,0 +1,40 @@
+
+**** Build of configuration Default for project tutorial-2-mixedprocessing ****
+
+/home/kubo/android-ndk-r8e/ndk-build 
+Install        : libmixed_sample.so => libs/armeabi-v7a/libmixed_sample.so
+Install        : libnative_camera_r2.2.0.so => libs/armeabi-v7a/libnative_camera_r2.2.0.so
+Install        : libnative_camera_r2.3.3.so => libs/armeabi-v7a/libnative_camera_r2.3.3.so
+Install        : libnative_camera_r3.0.1.so => libs/armeabi-v7a/libnative_camera_r3.0.1.so
+Install        : libnative_camera_r4.0.0.so => libs/armeabi-v7a/libnative_camera_r4.0.0.so
+Install        : libnative_camera_r4.0.3.so => libs/armeabi-v7a/libnative_camera_r4.0.3.so
+Install        : libnative_camera_r4.1.1.so => libs/armeabi-v7a/libnative_camera_r4.1.1.so
+Install        : libnative_camera_r4.2.0.so => libs/armeabi-v7a/libnative_camera_r4.2.0.so
+Install        : libopencv_info.so => libs/armeabi-v7a/libopencv_info.so
+Install        : libopencv_java.so => libs/armeabi-v7a/libopencv_java.so
+Install        : libmixed_sample.so => libs/armeabi/libmixed_sample.so
+Install        : libnative_camera_r2.2.0.so => libs/armeabi/libnative_camera_r2.2.0.so
+Install        : libnative_camera_r2.3.3.so => libs/armeabi/libnative_camera_r2.3.3.so
+Install        : libnative_camera_r3.0.1.so => libs/armeabi/libnative_camera_r3.0.1.so
+Install        : libnative_camera_r4.0.0.so => libs/armeabi/libnative_camera_r4.0.0.so
+Install        : libnative_camera_r4.0.3.so => libs/armeabi/libnative_camera_r4.0.3.so
+Install        : libnative_camera_r4.1.1.so => libs/armeabi/libnative_camera_r4.1.1.so
+Install        : libnative_camera_r4.2.0.so => libs/armeabi/libnative_camera_r4.2.0.so
+Install        : libopencv_info.so => libs/armeabi/libopencv_info.so
+Install        : libopencv_java.so => libs/armeabi/libopencv_java.so
+Install        : libmixed_sample.so => libs/x86/libmixed_sample.so
+Install        : libnative_camera_r2.3.3.so => libs/x86/libnative_camera_r2.3.3.so
+Install        : libnative_camera_r3.0.1.so => libs/x86/libnative_camera_r3.0.1.so
+Install        : libnative_camera_r4.0.3.so => libs/x86/libnative_camera_r4.0.3.so
+Install        : libnative_camera_r4.1.1.so => libs/x86/libnative_camera_r4.1.1.so
+Install        : libnative_camera_r4.2.0.so => libs/x86/libnative_camera_r4.2.0.so
+Install        : libopencv_info.so => libs/x86/libopencv_info.so
+Install        : libopencv_java.so => libs/x86/libopencv_java.so
+Install        : libmixed_sample.so => libs/mips/libmixed_sample.so
+Install        : libnative_camera_r4.0.3.so => libs/mips/libnative_camera_r4.0.3.so
+Install        : libnative_camera_r4.1.1.so => libs/mips/libnative_camera_r4.1.1.so
+Install        : libnative_camera_r4.2.0.so => libs/mips/libnative_camera_r4.2.0.so
+Install        : libopencv_info.so => libs/mips/libopencv_info.so
+Install        : libopencv_java.so => libs/mips/libopencv_java.so
+
+**** Build Finished ****

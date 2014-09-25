@@ -1,0 +1,703 @@
+//TODO on surface changed update display size 
+
+package com.penandplay;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+
+import com.penandplay.BitmapManager;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.media.MediaPlayer;
+import android.os.Bundle;
+import android.os.Debug;
+import android.os.Environment;
+import android.os.Handler;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnTouchListener;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
+import android.view.animation.RotateAnimation;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.MediaController;
+//TODO concurrent modificatio exception on back pressed
+//TODO wheel not turning the first run
+public class DisplaySequenceActivity extends Activity implements SurfaceHolder.Callback, OnTouchListener{
+		
+	private static int timer =0;
+	private static int canvas_h;
+	private static int canvas_w;
+	private final static Object timerlock=new Object();
+	public final static Object pauselock=new Object();
+	public final static Object uploadlock=new Object();
+	
+	public static double fps = 12;
+	//public double interval;
+	public int hide_time = 3; //seconds to hide controls
+	public int timerLimit=(int)Math.round(hide_time*fps);
+	public int new_hide_time = 7;
+	
+	private ScreenUpdater upd;
+	private static final String TAG = "DisplaySequence";
+	private File[] ordered_files;
+	int width;
+	int height;
+	//public String fileName;
+	public float framerate;
+	private Thread t = null;
+	//private Thread et = null;
+	private static VideoEncoder encoder;
+
+	private ImageButton playButton;
+	private ImageButton photoButton;
+	private ImageButton uploadButton;
+	private ImageButton settingsButton;
+	private OnClickListener playListener;
+	private OnClickListener uploadListener;
+	private OnClickListener photoListener;
+	private OnClickListener settingsListener;
+	private static boolean paused=false;
+	private static boolean hidden=false;
+	private static boolean first=true;
+	private static boolean video_ready=false;
+	private static String videofile;
+	private boolean next_layer=true;
+	private boolean no_new_images=false;
+	private HashMap<Integer,ArrayList<String>> allgroups; 
+	private BitmapManager  btmpass;
+	private  String batchnr;
+	private static boolean video_playing = false;
+	private MediaPlayer mMediaPlayer;
+	private MediaController mcontroller;
+	
+	private Animation hanim;
+	private Animation uhanim;
+	private RotateAnimation ranim;
+	
+	private final Handler handler = new Handler();
+	private ExecutorService executor; 
+	
+	private SurfaceView sSurfaceView;
+	private SurfaceHolder sHolder;
+	public Canvas canvas;	
+	 Paint paint;
+	 public static String session = Environment.getExternalStorageDirectory().getPath() + File.separator + "Pen_and_play" + File.separator + "session" + File.separator;
+	
+	 public DisplaySequenceActivity() {
+	    	    }
+	 
+	    /** Called when the activity is first created. */
+	    @SuppressLint("NewApi")
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {	
+			
+			paint= new Paint(Paint.FILTER_BITMAP_FLAG |
+			                    Paint.DITHER_FLAG |
+			                    Paint.ANTI_ALIAS_FLAG);
+		        Log.d(TAG, "new " + this.getClass());
+	    	
+	       	super.onCreate(savedInstanceState);
+	     
+
+	    	
+	    	btmpass = BitmapManager.getInstance();
+	      	
+	      	
+	      	
+	    	executor = Executors.newFixedThreadPool(1);
+	    	//bitmaps=new ArrayList<ArrayList<Bitmap>>();
+	    	//bitmapArray = new ArrayList<Bitmap>();
+	    	
+	    	//open xmls and save to sd card for native access 
+	    	Log.d(TAG, "display sequence activity created ");
+
+	    	setContentView(R.layout.sequence_view);
+	        Log.d(TAG, "set content view");
+
+	    	
+	    	sSurfaceView = (SurfaceView)findViewById(R.id.sequence);
+	    	sSurfaceView.setDrawingCacheEnabled(true);
+	    	Log.d(TAG, "sequence layout set " + this.getClass());
+
+	    	sHolder = sSurfaceView.getHolder();
+			Log.d(TAG, "Surface Holder instantiated");
+		    sHolder.addCallback(this);
+		    Log.d(TAG, "Surface Holder Callback set");
+		    sSurfaceView.setOnTouchListener(this); 
+
+		     //TODO encode only if more photos added
+	    	upd = new ScreenUpdater();
+
+
+		    
+		    playButton=(ImageButton)findViewById(R.id.play_button);
+	        photoButton=(ImageButton)findViewById(R.id.photo_button);
+	        uploadButton=(ImageButton)findViewById(R.id.upload_button);
+	        settingsButton=(ImageButton)findViewById(R.id.settings_button);
+	        hanim = AnimationUtils.loadAnimation(getBaseContext(), R.anim.hidecontrols);
+	        uhanim = AnimationUtils.loadAnimation(getBaseContext(), R.anim.unhidecontrols);
+	        //ranim = (RotateAnimation)AnimationUtils.loadAnimation(getBaseContext(), R.anim.rotate);
+	        ranim = new RotateAnimation(0, 360,Animation.RELATIVE_TO_SELF,0.5f,Animation.RELATIVE_TO_SELF,0.5f);
+	        
+	        ranim.setStartOffset(0);
+	        ranim.setDuration(1000);
+	        ranim.setFillAfter(true);
+    		ranim.setRepeatMode(Animation.INFINITE);
+
+
+	        playListener = new OnClickListener(){
+	            public void onClick(View v)
+	            {   if (paused){//TODO play pause 
+	            	 	paused=false;
+	            	 	if(video_ready){
+	            	 		video_playing=true;
+	            	        mMediaPlayer.start();
+	            	 	}
+	            	 	Log.d(TAG, "playing ");
+	            		playButton.setImageResource(R.drawable.ic_pause);
+	            		
+	            		synchronized(pauselock){
+		            	 	Log.d(TAG, "notifying ");
+
+		            	 	pauselock.notify();
+	            			Log.d(TAG, "notified ");
+	            		}
+	            		timerLimit=(int)Math.round(hide_time*fps);
+	            		first=true;
+	            		synchronized(timerlock){timer=0;}	
+	            	}else{
+	            		mMediaPlayer.pause();
+	            	 	paused=true;
+	            	 	video_playing=false;
+	            	 	Log.d(TAG, "button paused ");
+	            		playButton.setImageResource(R.drawable.ic_play);
+	            		
+	            	}
+	            	
+	            }
+	        };
+	        
+	        uploadListener = new OnClickListener(){
+	            public void onClick(View v)
+	            { 
+	            	synchronized(uploadlock){
+	            		
+	            		        		
+	            	}
+	            	//ranim.setRepeatMode(Animation.INFINITE);
+            		//uploadButton.clearAnimation();
+	         		uploadButton.setImageResource(R.drawable.ic_running);
+            	    uploadButton.startAnimation(ranim);
+        		    uploadButton.setOnClickListener(null);
+        		    
+	       	            Log.d(TAG, "starting encoder NOT");
+	       		    	
+	       		    /*	//  future= executor.submit(encoder);
+	       		     try {
+	       		      // videofile = (String) future.get(); // use future
+	       		     } catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} catch (ExecutionException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					} finally{
+*/
+	       		    	
+	       		    	//uploadButton.clearAnimation();
+	       		   		uploadButton.setOnClickListener(this);
+	       				
+	       		    // }
+	            }
+	        };
+	        
+	        
+	       photoListener = new OnClickListener(){
+	            public void onClick(View v) 
+	            {      		photoButton.setOnClickListener(null);
+	            			Intent capture_intent = new Intent(getBaseContext(), PhotoActivity.class);
+	            			if(next_layer){
+	            				capture_intent.putExtra("nextlayer","CUTOUT");
+	            			}else{
+	            				capture_intent.putExtra("nextlayer","OPAQUE");
+	            			}
+	                    	capture_intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+	            			setResult(RESULT_OK,capture_intent);
+	            			
+	            			//startActivity(capture_intent);
+	            			finish();
+	            			   
+	            			}
+	        };
+	        
+	        photoButton.setOnClickListener(photoListener); 
+	        playButton.setOnClickListener(null); 
+	        uploadButton.setOnClickListener(null);
+	        playButton.setAnimation(ranim);
+
+	        
+		    
+	    	Intent intent = getIntent(); // gets the previously created intent
+	        try{
+	        	batchnr = intent.getStringExtra("this_batch");
+	        }catch(NullPointerException e){
+	        	Log.d(TAG, "no images, just replaying ");
+	        	no_new_images = true;
+	        }
+	        no_new_images = false;
+	        Log.d(TAG, "batch of images: " + batchnr);
+	        
+	      
+	       
+	
+		        
+		        
+	    }
+	     
+	    @SuppressLint("NewApi")
+		
+		@Override
+	    public void onStart()
+	    {   super.onStart();
+    		Log.d(TAG, "onStart Called" );	    
+    	
+	        
+	    }
+	
+	    @Override
+	    public void onBackPressed() {	    	
+	    	    super.onBackPressed();
+	    	    Integer last_group = null;
+	    	    for (Integer key : allgroups.keySet()){
+	    	    		    	  last_group=key;  	
+	    	    }
+	    	    btmpass.removeGroup(last_group);
+	    	    
+	            Intent capture_intent = new Intent(getBaseContext(), PhotoActivity.class);
+	        	capture_intent.putExtra("nextlayer","QUIT");
+				setResult(RESULT_OK,capture_intent);
+	            finish();
+	    }
+	    
+	    @Override
+	    public void onResume()
+	    {   super.onResume();
+	    	Log.d(TAG, "onResume Called" );
+	    	/*
+	    	t = new Thread(upd);
+	    	upd.running = true;
+		    t.start();
+		    */
+	    }
+	    @Override
+	    public void onPause()
+	    {
+	    	super.onPause();
+	      	Log.d(TAG,"onPause event"); 
+	     	upd.running = false;
+	      	Log.d(TAG,"running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.d(TAG,"paused"); 
+	    }
+	    
+	    @Override
+	    public void onDestroy() {
+	        //deleteDirectory(parentDir);
+	        super.onDestroy();
+	      	Log.d(TAG,"onDestroy event"); 
+	     	upd.running = false;
+	      	Log.d(TAG,"set running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.d(TAG,"paused"); 
+		    
+	    }
+
+	 
+
+		@Override
+		public void surfaceChanged(SurfaceHolder holder, int format, int width,int height) {
+			// TODO Auto-generated method stub
+			/*
+			if ( sHolder!=null){
+			canvas = sHolder.lockCanvas(null);									
+			canvas_h = canvas.getHeight();
+			canvas_w = canvas.getWidth();
+			sHolder.unlockCanvasAndPost(canvas);
+			}
+			*/
+			Log.d(TAG,"SURFACE CHANGED width " + sHolder.getSurfaceFrame().width() + " height " + sHolder.getSurfaceFrame().height() );
+		}
+
+		@Override
+		public void surfaceCreated(SurfaceHolder holder) {
+			Log.d(TAG,"Surface created");
+
+	    	t = new Thread(upd);
+	    	upd.running = true;
+		    t.start();
+		}
+
+		@Override
+		public void surfaceDestroyed(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+			if(t == null){
+			upd.running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+			}
+		}
+		
+
+		private class ScreenUpdater implements Runnable{
+			private long startTime;
+			private long estimatedTime;
+			private long waittime;
+			private double est;
+			private double est_frrate;
+			
+			public boolean running = false;
+
+					
+			@Override
+			public void run() {
+				double interval = 1/fps;
+				
+				
+				Log.d(TAG,"framerate " + fps +" fps, limit " + timerLimit  + " frames, interval " +interval +"sec" );
+		    	Display display = getWindowManager().getDefaultDisplay();
+		    	width = display.getWidth();  // deprecated
+		    	height = display.getHeight();  // deprecated
+		    	if (height>width){
+		    		Log.d(TAG, "portrait orinetation?" );
+		    		height= display.getWidth();  // deprecated
+		    		width = display.getHeight();  // deprecated
+			    		
+		    	}
+		    	Log.d(TAG,"getting all groups");
+		    	allgroups = null;
+			    allgroups = btmpass.getAllGroups();
+			    Log.d(TAG,"got bitmaps " + allgroups);	
+			    
+				/*
+				bitmapArray = btmpass.getGroup(Integer.parseInt(batchnr));
+				Log.d(TAG,"got bitmaps");	
+			    int longest = btmpass.longestLayer;
+		        ArrayList<String> layer; 
+		        Bitmap image;
+		        */
+				
+				
+				int inter= (int) Math.round(interval*1000);
+				//Log.d(TAG, "inter frame time " + inter + " ms" );
+				
+				//stack the layers 
+				int limit = btmpass.longestLayer;
+				boolean first_run = true;
+				Bitmap bitmap;
+				BitmapFactory.Options options = new BitmapFactory.Options();
+				options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+				int ii = 0;
+				mMediaPlayer = new MediaPlayer();	
+				encoder = new VideoEncoder();
+				Log.d(TAG,"new encoder");
+				while (running){//timer thread 
+							
+							if(!paused){
+								startTime = System.nanoTime();
+								synchronized(timerlock){
+									if(timer==0 && !first && hidden){
+										handler.post(unhide_ctrls);
+										hidden=false;
+									}
+									timer++;	
+									if((timer>timerLimit)&&!hidden){
+										handler.post(hide_ctrls);
+										hidden=true;
+										first=false;
+									}
+										
+								}	
+								
+								if(!video_playing){
+									int w =0;
+									int h =0;
+									canvas = null;
+									Canvas frame = null;
+									Bitmap cs = null;
+									try {
+										//Log.d(TAG, "locking canvas");
+										canvas = sHolder.lockCanvas(null);									
+										canvas_h = canvas.getHeight();
+										canvas_w = canvas.getWidth();
+										
+										//canvas.drawColor(Color.WHITE);
+										if(sHolder==null){
+											Log.d(TAG, "WTF sHolder null");
+	
+										}
+										synchronized (sHolder) {
+											if(canvas==null){
+												Log.d(TAG, "WTF canvas null");
+											}
+											if(first_run){
+												
+												cs = Bitmap.createBitmap(canvas_w, canvas_h, Bitmap.Config.ARGB_8888); 
+												frame = new Canvas(cs);
+											}
+											for (Integer key : allgroups.keySet()){
+												
+												Log.d(TAG, " displaying group " + key + " image " + allgroups.get(key).get(ii));
+												//TODO static access
+												bitmap = btmpass.getBitmapFromMemCache(allgroups.get(key).get(ii));											
+											    if (bitmap == null) {
+											    	Log.d(TAG, "CACHE MISS");
+											        bitmap=BitmapFactory.decodeFile(session+allgroups.get(key).get(ii), options);			        
+											    }else{Log.d(TAG, "CACHE HIT");}
+											    w=bitmap.getWidth();
+										        h=bitmap.getHeight();
+										        Log.d(TAG, "w h " +w+"x" +h );										
+												canvas.drawBitmap(bitmap, (canvas_w-w)/2, (canvas_h-h)/2, paint);
+												if(first_run){
+													frame.drawBitmap(bitmap, 0f, 0f, null); 
+												}				
+												
+											}
+											if(first_run){
+												int[] pixeldata=new int [canvas_w*canvas_h];
+												cs.getPixels(pixeldata, 0, canvas_w, 0, 0, canvas_w, canvas_h);
+												if(ii==0){
+													Log.d(TAG,"initializing encoder");
+													encoder.initialize(canvas_w,canvas_h,fps);
+												}
+												Log.d(TAG,"adding frame, index" + ii);
+												encoder.addFrame(pixeldata);//canvas get pixel data
+												Log.d(TAG,"frame added");
+												pixeldata=null;
+												frame=null; 
+												cs=null;	 
+											}	    
+											bitmap=null;	
+											
+												
+										}
+									}
+									catch(NullPointerException e ){
+										Log.d(TAG, "NOPE " + e);
+										
+									} finally {
+										// do this in a finally so that if an exception is thrown
+										// during the above, we don't leave the Surface in an
+										// inconsistent state
+										if (canvas != null) {
+											sHolder.unlockCanvasAndPost(canvas);
+										}
+									}
+								}
+								
+								 estimatedTime = System.nanoTime() - startTime;
+								 est = estimatedTime/1000000;
+								 waittime = (long)(inter-est);
+								 if(waittime>0){
+								 
+									 	try {	 		
+									 		Thread.sleep(waittime);
+									 		//Thread.sleep(waittime*10);
+									 	} catch (InterruptedException e) {
+									 		return;
+									 	}
+									 	
+								 }else{
+									 	est_frrate=1000/(est);
+										Log.d(TAG, "FRAMERATE: " + est_frrate  + " fps" );
+								 }
+								 
+							}else{//paused							
+								try {
+									synchronized(pauselock){			
+										pauselock.wait();
+										Log.d(TAG, "thread started");
+									}							
+								} catch (InterruptedException e1) {
+									// TODO Auto-generated catch block
+								}
+								
+								
+							}
+							
+					        ii++;
+					        if(ii>=limit){
+					        	if (first_run){
+					        		//TODO unlock pause button
+					        		
+					        		Log.d(TAG,"finalizing, index " + ii);
+					        		encoder.finalizeVid();
+					        		Log.d(TAG,"finalized");
+									first_run=false;
+									video_playing=true;
+						            mMediaPlayer.setDisplay(sHolder);						
+									try {
+										mMediaPlayer.setDataSource(DisplaySequenceActivity.session+File.separator+"temp.webm");
+									} catch (IllegalArgumentException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									} catch (SecurityException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									} catch (IllegalStateException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									} catch (IOException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									}
+									try {
+										mMediaPlayer.prepare();
+									} catch (IllegalStateException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									} catch (IOException e) {
+										Log.d(TAG,"mplayer exception: " + e);
+										video_playing=false;
+									}
+									if(video_playing){
+										video_ready=true;
+										mMediaPlayer.start();
+										
+									}
+									
+									DisplaySequenceActivity.this.runOnUiThread(new Runnable() {
+					  				    public void run() {
+					  				    	  playButton.clearAnimation();
+					  				    	  playButton.setOnClickListener(playListener);
+					  				    	  playButton.setImageResource(R.drawable.ic_pause);
+					  				    	  uploadButton.setOnClickListener(uploadListener);
+					  						   	
+					  				    }
+					  			   	});
+								}
+					        	ii=0;}
+					        Log.d(TAG, "index " + ii);
+						
+					
+				}
+					
+				mMediaPlayer.release();
+				mMediaPlayer =null;
+			}
+		
+		}
+		
+		
+		final Runnable hide_ctrls = new Runnable() {
+			   public void run() {
+				   hide_controls();
+			   }
+			};
+
+		final Runnable unhide_ctrls = new Runnable() {
+				   public void run() {
+					   unhide_controls();
+				   }
+				};
+			
+		private void hide_controls(){
+			Log.d(TAG, "hiding buttons" );
+			   photoButton.startAnimation(hanim); 
+		       playButton.startAnimation(hanim); 
+		       uploadButton.startAnimation(hanim);
+		       settingsButton.startAnimation(hanim);
+		       settingsButton.setOnClickListener(null);
+		       uploadButton.setOnClickListener(null);
+			   photoButton.setOnClickListener(null); 
+		       playButton.setOnClickListener(null);
+		}
+		
+
+		private void unhide_controls(){
+			Log.d(TAG, "unhiding buttons" );
+				uploadButton.startAnimation(uhanim);
+				photoButton.startAnimation(uhanim); 
+				playButton.startAnimation(uhanim); 
+				settingsButton.startAnimation(uhanim); 
+				settingsButton.setOnClickListener(uploadListener);
+				uploadButton.setOnClickListener(uploadListener);
+				photoButton.setOnClickListener(photoListener); 
+			    playButton.setOnClickListener(playListener); 
+
+		}
+
+
+		@Override
+		   public boolean onTouch(View arg0, MotionEvent event) {
+			// TODO Auto-generated method stub
+
+    			
+    
+			timerLimit=(int)Math.round(new_hide_time*fps);
+    		//Log.d(TAG, "new limit " + timerLimit );
+    		
+			synchronized(timerlock){timer=0; }			
+			Log.d(TAG, "reset timer ");
+			return false;
+		}
+	    
+	
+
+		   @Override
+		    public void onConfigurationChanged(Configuration newConfig) 
+		    {
+		        super.onConfigurationChanged(newConfig);
+		    }
+}

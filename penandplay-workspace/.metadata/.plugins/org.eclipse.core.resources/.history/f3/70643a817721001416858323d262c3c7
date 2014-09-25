@@ -1,0 +1,353 @@
+package com.penandplay;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map.Entry;
+import java.util.TreeMap;
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.util.Log;
+
+import com.google.libvpx.LibVpxEnc;
+import com.google.libvpx.LibVpxEncConfig;
+import com.google.libvpx.LibVpxException;
+import com.google.libvpx.Rational;
+import com.google.libvpx.VpxCodecCxPkt;
+import com.google.libwebm.mkvmuxer.MkvWriter;
+import com.google.libwebm.mkvmuxer.Segment;
+import com.google.libwebm.mkvmuxer.SegmentInfo;
+
+
+public class BitmapManager {
+	//TODO chceck if layer has at least one photo to accept
+	//TODO change hash map to thread safe concurrent hashmap
+	//TODO change length, force some minimal playback duration through layer with n null bitmaps 
+		public static int longestLayer =0;
+		private static String TAG = "BitmapManager";
+		private static Object lock = new Object();
+	 	private static boolean loop = true;
+	 	private static Integer longest=0;
+	 	public static int width;
+	 	public static int height;
+	 	private static double display_ratio; 
+	 	
+		public static  HashMap<Integer,HashMap<Integer,String>> numbered_bitmaps = new HashMap<Integer,HashMap<Integer,String>>();
+		private static HashMap<Integer,ArrayList<String>> ordered_bitmaps = new HashMap<Integer,ArrayList<String>>();
+		public static HashMap<Integer,ArrayList<String>> playback_bitmaps = new HashMap<Integer,ArrayList<String>>();
+		public static  HashMap<Integer,String> loop_preferences =   new HashMap<Integer,String>();
+		
+
+		// Private constructor prevents instantiation from other classes
+		private BitmapManager() {//Debug.startMethodTracing("logname"); 
+
+		}
+	 
+		/**
+		* SingletonHolder is loaded on the first execution of Singleton.getInstance() 
+		* or the first access to SingletonHolder.INSTANCE, not before.
+		*/
+		private static class BitmapManagerHolder { 
+			private static final BitmapManager  INSTANCE = new BitmapManager ();
+		}
+	 
+		public static BitmapManager  getInstance() {
+			return BitmapManagerHolder.INSTANCE;
+		}
+	
+		public static void ReorderBitmaps(ArrayList<Integer> numbers){
+
+			//TODO guess numbers if just 1 or 2 are off 
+			synchronized(lock){
+		  		Log.d(TAG,"reordering ,got lock");	
+
+				TreeMap<Integer,String> presorted = new TreeMap<Integer,String>();
+				TreeMap<Integer,String> fixed = new TreeMap<Integer,String>();
+				ArrayList<String> finalized = new ArrayList<String>();
+				int groupnr=0;
+				for(int nr : numbers){
+					HashMap<Integer,String> numbered = numbered_bitmaps.get(nr);
+					for(Entry<Integer,String> entry : numbered.entrySet()) {
+					    Integer key = entry.getKey();
+					    String value = entry.getValue();
+					    if(key>=1000){//written framenumber, gets special treatment later
+					    	int newkey = (key-1000);	
+					    	fixed.put(newkey,value);
+					    }else{//interpolated number, will be sorted first
+					    	int newkey = key + 1000*nr;
+					    	presorted.put(newkey,value);
+					    }
+					}	  
+					groupnr = nr;
+					numbered_bitmaps.remove(nr);	
+				}
+				for(int pnr : presorted.keySet()){
+					finalized.add(presorted.get(pnr));					
+				}
+				for(int fnr : fixed.keySet()){
+					finalized.add(fnr,fixed.get(fnr));				
+				}
+			
+				loop_preferences.put(groupnr, "LOOP");//TODO get loop preferences
+				ordered_bitmaps.put(groupnr, finalized);
+				Log.d(TAG,"finalized length " + finalized.size());	
+				generatePlaybackBitmaps(groupnr);
+				scaleBitmaps(groupnr);
+			}
+			System.gc();
+	  		Log.d(TAG,"Bitmap reordered");	
+		}
+		
+		public static ArrayList<String> getGroup(int gr){
+			synchronized(lock){
+				return ordered_bitmaps.get(gr);
+			}
+		}
+		
+		public static HashMap<Integer,ArrayList<String>> getAllGroups(){
+					return playback_bitmaps;
+		}
+		
+		
+		private static void generatePlaybackBitmaps(Integer groupnr){
+				
+				boolean reorder_all=false;
+				for(Integer key : ordered_bitmaps.keySet()) {
+					ArrayList<String> original_layer = ordered_bitmaps.get(key);
+					ArrayList<String> playback_layer = new ArrayList<String>(longestLayer);
+					if(loop_preferences.get(key).equals("LOOP")){
+						if(original_layer.size()==longestLayer){
+							//Log.d(TAG,"equal length");	
+							playback_layer=original_layer;	
+							playback_bitmaps.put(groupnr,playback_layer);
+						}else if(original_layer.size()>longestLayer){//keep this and loop/prolong all others videos
+							//according to their preferences
+							//Log.d(TAG,"longer, reorder the rest");	
+							longestLayer=original_layer.size();
+							playback_layer=original_layer;
+							//longest = key;
+							reorder_all=true;
+							playback_bitmaps.put(groupnr,playback_layer);
+						}else{//loop new video
+							//Log.d(TAG,"shorter, looping");	
+							int i =0;
+							while(i<longestLayer){
+								for (String b : original_layer){							
+									playback_layer.add(i,b);
+									i++;
+									Log.d(TAG,"moving: " + b);
+								}
+							}
+						}
+						
+					}
+
+				}
+				if(reorder_all){
+					Log.d(TAG,"reordering all");	
+					for(Integer key : ordered_bitmaps.keySet()) {
+						//Log.d(TAG,"reordering layer " + key);	
+						if(!(key==groupnr)){
+							int i =0;
+							playback_bitmaps.remove(key);
+							//Log.d(TAG,"removed layer " + key);	
+							playback_bitmaps.put(key, new ArrayList<String>());
+							while(i<longestLayer){
+								for (String b : ordered_bitmaps.get(key)){							
+									playback_bitmaps.get(key).add(i,b);
+									i++;
+									//Log.d(TAG,"moving: " + b + " to position " + i);
+								}
+							}
+						}
+					}
+				}
+
+				
+				
+				for(Integer key : playback_bitmaps.keySet()) {
+			  		Log.d(TAG,"length of layer "+ key +":" + playback_bitmaps.get(key).size());	
+			  		
+				}
+				
+				System.gc();
+			//record scaling ratio for each image 	
+			
+			//TODO respect the playback settings to loop/clip/mirrorloop/
+		}
+		public static int calculateInSampleSize(int orig_width, int orig_height, int reqWidth, int reqHeight) {
+	    // Raw height and width of image
+
+	    int inSampleSize = 1;
+
+	    if (orig_height > reqHeight || orig_width > reqWidth) {
+
+	        int halfHeight = orig_height / 2;
+	        int halfWidth = orig_width / 2;
+
+	        // Calculate the largest inSampleSize value that is a power of 2 and keeps both
+	        // height and width larger than the requested height and width.
+	        while ((halfHeight / inSampleSize) > reqHeight
+	                && (halfWidth / inSampleSize) > reqWidth) {
+	            inSampleSize *= 2;
+	        }
+	    }
+
+	    return inSampleSize;
+	}
+		public static void scaleBitmaps(int group){
+			BitmapFactory.Options options = new BitmapFactory.Options();
+		 	display_ratio=(double)width/(double)height; 
+			
+		 	
+		 	
+			//here scale the images
+			Bitmap bitmap;
+			Bitmap scaled;
+			double bw=0;
+			double bh=0;
+			double bitmap_ratio;
+			double scale_ratio_w;
+			double scale_ratio_h;	
+			int[] pix;
+			
+			
+			String webmOutputName=DisplaySequenceActivity.session+group+File.separator+"vid.webm";
+			int rate=(int)Math.round(DisplaySequenceActivity.fps);
+			long fourcc=LibVpxEnc.FOURCC_ARGB;
+			int scale =1;
+			LibVpxEncConfig encoderConfig = null;
+			LibVpxEnc encoder = null;
+			MkvWriter mkvWriter = null;
+			
+			ArrayList<String> layer  = playback_bitmaps.get(group);
+			int nr=0;
+			for(String s : layer){//calculate average 
+				nr++;
+				Log.d(TAG,"decoding size of "+DisplaySequenceActivity.session+s);
+				bitmap = BitmapFactory.decodeFile(DisplaySequenceActivity.session+s,options);
+				bh += options.outHeight;
+				bw += options.outWidth;
+			}
+			bw=bw/nr;
+			bh=bh/nr;
+			Log.d(TAG,"average width: "+bw+" avg height: "+ bh);
+			Log.d(TAG,"device width: "+width+" device height: "+ height);
+			
+
+			bitmap_ratio = bw/bh;
+			Log.d(TAG,"device ar : "+display_ratio + "image ar: " + bitmap_ratio);
+			scale_ratio_w=((double)width)/bw;
+			scale_ratio_h=((double)height)/bh;		
+			options.inSampleSize=calculateInSampleSize((int)bw,(int)bh,width,height);
+			Log.d(TAG,"in sample size of" +calculateInSampleSize((int)bw,(int)bh,width,height));
+			Log.d(TAG,"width x height " + bw +"x"+bh);
+			options.inJustDecodeBounds = false;
+			
+			try {
+				encoderConfig = new LibVpxEncConfig(width, height);
+				encoder = new LibVpxEnc(encoderConfig);
+
+				// libwebm expects nanosecond units
+				encoderConfig.setTimebase(1, 1000000000);
+				Rational timeBase = encoderConfig.getTimebase();
+				Rational frameRate = new Rational(rate, scale);
+				Rational timeMultiplier = timeBase.multiply(frameRate).reciprocal();
+				int framesIn = 1;
+				
+				mkvWriter = new MkvWriter();
+				if (!mkvWriter.open(webmOutputName)) {
+					Log.d(TAG,"WebM Output name is invalid or error while opening.");
+					
+				}
+				Segment muxerSegment = new Segment();
+				if (!muxerSegment.init(mkvWriter)) {
+					Log.d(TAG,"Could not initialize muxer segment.");
+					
+				}
+				SegmentInfo muxerSegmentInfo = muxerSegment.getSegmentInfo();
+				muxerSegmentInfo.setWritingApp("Pen_and_Play output");
+				
+				long newVideoTrackNumber = muxerSegment.addVideoTrack(width,height, 0);
+				if (newVideoTrackNumber == 0) {
+					Log.d(TAG,"Could not add video track.");
+					
+				}
+				
+				for(String s : layer){
+					Log.d(TAG,"decoding  "+DisplaySequenceActivity.session+s);
+					bitmap = BitmapFactory.decodeFile(DisplaySequenceActivity.session+s,options);
+					//Log.d(TAG,"scale ratio h & w "+scale_ratio_h + " " + scale_ratio_w);
+						
+					if(bitmap_ratio>display_ratio){//fit width to screen, compute height 
+						
+						scaled = Bitmap.createScaledBitmap(bitmap, width, (int)Math.round(bh*scale_ratio_w), true);
+						//Log.d(TAG,"computed height "+(int)Math.round(bh*scale_ratio_w));
+						//Log.d(TAG,"image ar after computation  "+(double)width/(int)Math.round(bh*scale_ratio_w));
+					}else{//fit height
+						scaled = Bitmap.createScaledBitmap(bitmap,  (int)Math.round(bw*scale_ratio_h), height, true);
+						//Log.d(TAG,"computed width "+(int)Math.round(bw*scale_ratio_h));
+						//Log.d(TAG,"image ar after computation  "+Math.round(bh*scale_ratio_w)/(double)height);
+
+					}		
+					int w =scaled.getWidth();
+					int h = scaled.getHeight();
+					
+					long frameStart = timeMultiplier.multiply(framesIn - 1).toLong();
+					long nextFrameStart = timeMultiplier.multiply(framesIn).toLong();	
+																										//duration		
+					ArrayList<VpxCodecCxPkt> encPkt = encoder.convertIntEncodeFrame(srcFrame.get((framesIn-1)%nrframes), frameStart,nextFrameStart - frameStart, fourcc);
+					for (int i = 0; i < encPkt.size(); i++) {
+						VpxCodecCxPkt pkt = encPkt.get(i);
+						final boolean isKey = (pkt.flags & 0x1) == 1;
+						if (!muxerSegment.addFrame(pkt.buffer, newVideoTrackNumber,
+								pkt.pts, isKey)) {
+							Log.d(TAG,"Could not add frame.");
+							
+						}
+					}
+					++framesIn;
+					FileOutputStream out = null;
+					try {
+					    out = new FileOutputStream(DisplaySequenceActivity.session+s);
+					    scaled.compress(Bitmap.CompressFormat.PNG, 100, out);
+					} catch (Exception e) {
+						Log.d(TAG,"cannot save "+DisplaySequenceActivity.session+s);
+
+					} finally {
+					    try {
+					        if (out != null) {
+					            out.close();
+					        }
+					    } catch (IOException e) {
+					        e.printStackTrace();
+					    }
+					}
+
+					
+				}
+				if (!muxerSegment.finalizeSegment()) {
+					Log.d(TAG,"Finalization of segment failed.");
+					
+				}
+			} catch (LibVpxException e) {
+				Log.d(TAG,"Encoder error : " + e);
+				
+			} finally {
+				if (encoder != null) {
+					encoder.close();
+				}
+				if (encoderConfig != null) {
+					encoderConfig.close();
+				}
+				if (mkvWriter != null) {
+					mkvWriter.close();
+				}
+			}		
+			
+		bitmap=null;
+		scaled=null;}
+}

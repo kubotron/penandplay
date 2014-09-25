@@ -1,0 +1,25 @@
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <android/log.h>
+#include <jni.h>
+
+
+//using namespace cv;
+using namespace std;
+
+extern "C" {
+JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString);
+}
+
+extern "C"  JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString)
+{
+
+    const char *fileName = env->GetStringUTFChars(javaString, 0);
+
+	__android_log_print(ANDROID_LOG_DEBUG, "Native OpenCv", "file name: %s", fileName);
+
+	env->ReleaseStringUTFChars(javaString, fileName);
+   return;
+}
+
+

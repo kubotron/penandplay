@@ -1,0 +1,47 @@
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include <android/log.h>
+#include <jni.h>
+
+using namespace cv;
+using namespace std;
+
+const char* fileName;
+
+Mat src;
+
+
+
+
+
+void find_them_frames();
+
+extern "C" {
+JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString);
+}
+
+extern "C"  JNIEXPORT void JNICALL Java_org_opencv_redraw_RedRawActivity_FindFrames(JNIEnv *env, jobject object, jstring javaString)
+{
+
+    fileName = env->GetStringUTFChars(javaString, 0);
+    __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "Greetings from C");
+	__android_log_print(ANDROID_LOG_DEBUG, "Native Part", "file name: %s", fileName);
+
+	env->ReleaseStringUTFChars(javaString, fileName);
+	find_them_frames();
+   return;
+}
+
+void find_them_frames(){
+	 __android_log_print(ANDROID_LOG_DEBUG, "Native Part", "Lets find em frames");
+
+	   src = imread( fileName&, 1 );
+
+	   if( src.empty() )
+	     { help();
+	       return -1;
+	     }
+
+
+return;
+};

@@ -1,0 +1,345 @@
+package com.pencilation;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import com.pencilation.R;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnTouchListener;
+
+import android.widget.Toast;
+
+public class DisplaySequenceActivity extends Activity implements SurfaceHolder.Callback, OnTouchListener{
+		
+	private ScreenUpdater upd;
+	private static final String TAG = "DisplaySequence";
+	private String directory; 
+	private File[] files;
+	private File[] ordered_files;
+	int width;
+	int height;
+	public int interval = 60;
+	public String dir;
+	//public String fileName;
+	public float framerate;
+	Thread t = null;
+	
+	
+	private SurfaceView sSurfaceView;
+	private SurfaceHolder sHolder;
+	public Canvas canvas;	
+	 Paint paint;
+	
+	 public DisplaySequenceActivity() {
+		
+		
+		paint= new Paint(Paint.FILTER_BITMAP_FLAG |
+		                    Paint.DITHER_FLAG |
+		                    Paint.ANTI_ALIAS_FLAG);
+	        Log.i(TAG, "new " + this.getClass());
+	    	    }
+	 
+	    /** Called when the activity is first created. */
+	    @SuppressLint("NewApi")
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {
+	    	super.onCreate(savedInstanceState);
+	    	upd = new ScreenUpdater();
+	    	//open xmls and save to sd card for native access 
+	    	Log.i(TAG, "display sequence activity created ");
+
+	    	setContentView(R.layout.redraw_sequence_view);
+	        Log.i(TAG, "set content view");
+
+	    	
+	    	sSurfaceView = (SurfaceView)findViewById(R.id.sequence);
+	    	Log.i(TAG, "sequence layout set " + this.getClass());
+
+	    	sHolder = sSurfaceView.getHolder();
+			Log.i(TAG, "Surface Holder instantiated");
+		    sHolder.addCallback(this);
+		    Log.i(TAG, "Surface Holder Callback set");
+		    sSurfaceView.setOnTouchListener(this);
+
+		    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_NOSENSOR | ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+		    
+	    	Intent intent = getIntent(); // gets the previously created intent
+	        dir = intent.getStringExtra("directory");
+	       //fileName = intent.getStringExtra("image");
+		    	        
+
+		    Log.i(TAG, "got directory value " + dir);
+		        
+		        directory = dir;
+	         Log.i(TAG, "Image directory " + directory);
+	    		        
+		        File parentDir = new File(directory);
+		        files = parentDir.listFiles();
+		        //Log.i(TAG, "files listed");
+		        Arrays.sort(files);
+		        Log.i(TAG, "files sorted");
+		        
+		        
+	    }
+	     
+	    @SuppressLint("NewApi")
+		
+		@Override
+	    public void onStart()
+	    {   super.onStart();
+    		Log.i(TAG, "onStart Called" );	    
+    	
+	        
+	    }
+	
+	    @Override
+	    public void onBackPressed() {
+	            super.onBackPressed();
+	     	 
+	        
+	 	      	
+	        Intent capture_intent = new Intent(getBaseContext(), RedRawActivity.class);
+            capture_intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+	        startActivity(capture_intent);
+	            //this.finish();
+	    }
+	    
+	    @Override
+	    public void onResume()
+	    {   super.onResume();
+	    	Log.i(TAG, "onResume Called" );
+	    	upd.running = true;
+		    t = new Thread(upd);
+		    t.start();
+	    }
+	    @Override
+	    public void onPause()
+	    {
+	    	super.onPause();
+	      	Log.i(TAG,"onPause event"); 
+	     	upd.running = false;
+	      	Log.i(TAG,"running false"); 
+	      	if(t == null){
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+	      	}
+		    Log.i(TAG,"paused"); 
+	    }
+	    
+	    @Override
+	    public void onDestroy() {
+	        deleteDirectory();
+	        super.onDestroy();
+
+	    }
+
+	 
+
+		@Override
+		public void surfaceChanged(SurfaceHolder holder, int format, int width,
+				int height) {
+			// TODO Auto-generated method stub
+		
+
+			
+		}
+
+		@Override
+		public void surfaceCreated(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void surfaceDestroyed(SurfaceHolder holder) {
+			// TODO Auto-generated method stub
+			if(t == null){
+			upd.running = false;
+	    	while(true){
+	    		try{
+	    			t.join();
+	    		}catch(InterruptedException e){
+	    			e.printStackTrace();
+	    		}break;
+	    	}
+
+		    t = null;
+			}
+		}
+
+
+		private class ScreenUpdater implements Runnable{
+			long startTime;
+			long estimatedTime;	  
+			public boolean running = false;
+			public int interval=60;
+					
+			@Override
+			public void run() {
+				// TODO Auto-generated method stub
+		    	Display display = getWindowManager().getDefaultDisplay();
+		    	Point size = new Point();
+		    	width = display.getWidth();  // deprecated
+		    	height = display.getHeight();  // deprecated
+		    	if (height>width){
+		    		Log.i(TAG, "portrait orinetation?" );
+		    		height= display.getWidth();  // deprecated
+		    		width = display.getHeight();  // deprecated
+			    		
+		    	}
+		    	
+		    	/*display.getSize(size); //API 13 doesnt work on xperia active 2.3.4.
+		    	width = size.x;
+		    	height = size.y;*/
+		        Log.i(TAG, "width: "+width+", height: " + height );
+				ArrayList<Bitmap> bitmapArray = new ArrayList<Bitmap>();
+
+				for (File file : files) {
+
+					if(file.getName().endsWith(".png")){
+						String filename = directory+File.separator+file.getName();
+						Log.i(TAG, "png Image " + filename);
+						Bitmap fullSize = BitmapFactory.decodeFile(filename);
+						Bitmap bitmap = Bitmap.createScaledBitmap (fullSize,width, height, true);
+
+						bitmapArray.add(bitmap);
+
+					
+
+					}
+				}
+
+				
+				while (running){
+					for (Bitmap image : bitmapArray) {
+
+							startTime = System.nanoTime();    
+							
+							canvas = null;
+							try {
+								canvas = sHolder.lockCanvas(null);
+								synchronized (sHolder) {
+									//Log.i(TAG, "drawing bitmap");
+									canvas.drawBitmap(image, 0, 0, paint);
+									//Log.i(TAG, "drawing bitmap DONE ");
+
+								}
+							} finally {
+								// do this in a finally so that if an exception is thrown
+								// during the above, we don't leave the Surface in an
+								// inconsistent state
+								if (canvas != null) {
+									sHolder.unlockCanvasAndPost(canvas);
+								}
+							}
+
+							int inter = interval;
+							try {
+								Thread.sleep(inter);
+							} catch (InterruptedException e) {
+								// TODO Auto-generated catch block
+					         	Log.i(TAG,"oops");
+								e.printStackTrace();
+							}
+							
+							 estimatedTime = System.nanoTime() - startTime;
+					         framerate = 1000000000/estimatedTime;	  
+						}
+					}
+				
+			}
+			
+		}
+
+
+		@Override
+		   public boolean onTouch(View arg0, MotionEvent event) {
+			// TODO Auto-generated method stub
+			 
+			 		
+			 		int start = 40;
+					int step = 20;		     
+		        	int fps;
+		            int action = event.getAction();
+				    switch (action) {
+				        case MotionEvent.ACTION_DOWN:
+				         	interval += step;
+				         	if (interval >= 100){interval += step*2;}
+				        	if (interval >= 300){interval = start;}
+				         	fps = (int)1000/interval;
+				         	Log.i(TAG,"onTouch event DOWN");
+				        	Toast.makeText(getBaseContext(),"DOWN to ca. " + fps + "fps", 
+				                    Toast.LENGTH_SHORT).show();
+				            break;
+				        case MotionEvent.ACTION_UP:
+				         	interval -= step;
+				        	if (interval < start){interval = start;}
+				        	fps = (int)1000/interval;
+				        	Log.i(TAG,"onTouch event UP");
+				        	Toast.makeText(getBaseContext(),"UP to ca. " + fps + "fps", 
+				                    Toast.LENGTH_SHORT).show();
+				        // Do your stuff here
+				            break;
+				        case MotionEvent.ACTION_MOVE:
+					         	interval += 30;
+					         	if (interval >= 100){interval += 60;}
+					        	if (interval >= 600){interval = start;}
+					        	fps = (int)1000/interval;
+					        	Log.i(TAG,"onTouch event MOVE"); 
+					        	Toast.makeText(getBaseContext(),"MOVE to ca. " + fps + "fps", 
+					                    Toast.LENGTH_SHORT).show();
+					     break;   
+				        }
+				    upd.interval = interval;
+		            try {
+						Thread.sleep(500);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+		        	Toast.makeText(getBaseContext(),"REAL framerate ca. " + framerate + "fps", 
+		                    Toast.LENGTH_SHORT).show();
+		        
+			return false;
+		}
+	    
+		   private boolean deleteDirectory(File directory) {
+		        if(directory.exists()){
+		            File[] files = directory.listFiles();
+		            if(null!=files){
+		                for(int i=0; i<files.length; i++) {
+		                    if(files[i].isDirectory()) {
+		                        deleteDirectory(files[i]);
+		                    }
+		                    else {
+		                        files[i].delete();
+		                    }
+		                }
+		            }
+		        }
+		        return(directory.delete());
+		    }
+}

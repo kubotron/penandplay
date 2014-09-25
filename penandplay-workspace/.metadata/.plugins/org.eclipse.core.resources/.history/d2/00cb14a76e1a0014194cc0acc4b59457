@@ -1,0 +1,449 @@
+package com.pencilation;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+import com.pencilation.DisplaySequenceActivity;
+import com.pencilation.R;
+import com.pencilation.RedRawView;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.res.AssetManager;
+import android.hardware.Camera;
+import android.hardware.Camera.AutoFocusCallback;
+import android.hardware.Camera.PictureCallback;
+import android.hardware.Camera.ShutterCallback;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.os.Environment;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
+import android.view.View.OnTouchListener;
+import android.view.animation.AnimationUtils;
+import android.view.animation.RotateAnimation;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.Toast;
+
+
+
+public class RedRawActivity extends Activity implements OnTouchListener, PictureCallback {
+
+	private static final String TAG = "RedRaw Activity";
+	public native void FindFrames(String s, String t, String u);
+	private Camera mCamera;
+	private RedRawView mPreview;
+
+	private SurfaceView mSurfaceView = null;
+	private SurfaceHolder mHolder;
+	private static boolean nextPhoto = false;
+
+
+		
+	public String dirName;
+	public String fileName;
+	public String storage;
+	private String session_str;
+	
+	private RotateAnimation ranim;
+	
+	private OnClickListener playListener;
+	private OnClickListener photoListener;
+	private takePicture
+	private ImageButton playButton;
+	private ImageButton photoButton;
+	//private ImageButton cancelButton;
+	private static int  nr_tasks =0;
+	private static boolean done =false;
+	private static Object nr_tasks_lock;
+	private File session_directory;
+	
+	
+    static {
+            System.loadLibrary("find_frames");
+            Log.i(TAG, "Native library loaded");
+    }
+    public RedRawActivity() {
+        Log.i(TAG, "Instantiated new " + this.getClass());
+    }
+ 
+    /** Called when the activity is first created. */
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+    	super.onCreate(savedInstanceState);
+    /*	  if (savedInstanceState != null){
+    		  if(savedInstanceState.getSerializable("nr_tasks") != null) {
+  		        
+    	           nr_tasks = savedInstanceState.getInt("nr_tasks");
+    	           Log.i(TAG, "restored nr_tasks " + nr_tasks );
+    		  }
+    		  if(savedInstanceState.getSerializable("done") != null) {
+   	           		done =   savedInstanceState.getBoolean("done");
+   	           		Log.i(TAG, "restored done " + done );
+    		  }	
+	      }
+*/
+
+    	
+    	
+    	nr_tasks_lock = new Object();
+
+    	//open xmls and save to sd card for native access 
+    	copyAssets();
+    	Log.i(TAG, "ok assets copied ");
+    	if (mCamera==null){
+    	mCamera=getCameraInstance();
+    	Log.i(TAG, "mCamera attached" );
+    	}
+    	     	
+    	RedRawView mPreview = new RedRawView(this, mCamera);
+    	setContentView(R.layout.redraw_surface_view);
+    	
+    	FrameLayout preview=(FrameLayout)findViewById(R.id.redraw_java_surface_view);
+    	Log.i(TAG, "frame layout set " + this.getClass());
+    	preview.addView(mPreview);
+        //mPreview.setOnTouchListener(this);
+    
+
+        playButton=(ImageButton)findViewById(R.id.play_button);
+        photoButton=(ImageButton)findViewById(R.id.photo_button);
+       // cancelButton=(ImageButton)findViewById(R.id.cancel_button);
+        ranim = (RotateAnimation)AnimationUtils.loadAnimation(getBaseContext(), R.anim.rotate);
+
+        Log.i(TAG, "creating RedRaw directory " + this.getClass());
+        File directory = new File(Environment.getExternalStorageDirectory()+File.separator+"Pencilation");
+        directory.mkdirs();
+
+        session_directory = new File(Environment.getExternalStorageDirectory()+File.separator+"Pencilation"+File.separator+"session"+File.separator);
+        deleteDirectory(session_directory);
+        session_directory.mkdirs();
+        
+        session_str=session_directory.toString();
+        
+        playListener = new OnClickListener(){
+            public void onClick(View v)
+            {   Log.i(TAG,"Click ");
+            	Intent intent = new Intent(getBaseContext(), DisplaySequenceActivity.class);
+            	intent.putExtra("directory",session_str);
+            	//intent.putExtra("image",fileName);
+            	intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            	startActivity(intent);
+            	finish();
+            }
+        };
+        
+        
+
+        photoListener = new OnClickListener(){
+            public void onClick(View v)
+            {  Log.i(TAG,"onTouch event ");
+               try {
+        				Thread.sleep(500);
+        			} catch (InterruptedException e) {
+        				// TODO Auto-generated catch block
+        				e.printStackTrace();
+        			} // LOCK is held
+               mCamera.autoFocus(takePicture);   
+               //takePicture();
+                //        mCamera.startPreview();
+            }
+        };
+        
+        photoButton.setOnClickListener(photoListener); 
+        
+        photoButton.setOnLongClickListener(new OnLongClickListener()
+        {		//TODO submenu
+            public boolean onLongClick(View v)
+            {           	
+				return true;
+            }
+        }); 
+        
+        AutoFocusCallback takePicture = new AutoFocusCallback(){
+
+      	  @Override
+      	  public void onAutoFocus(boolean arg0, Camera arg1) {
+      		  shoot();	     	  }
+      	  };
+        
+        
+    }
+    
+    protected void onSaveInstanceState(Bundle state) {
+    	  super.onSaveInstanceState(state);
+   /* 	  state.putInt("nr_tasks", nr_tasks);
+    	  state.putBoolean("done", done);
+          Log.i(TAG, "saved state" );*/
+    }
+    
+    @Override
+    public void onBackPressed() {
+            super.onBackPressed();
+            this.finish();
+    }
+    
+    @SuppressLint("NewApi")
+	@Override
+    public void onResume()
+    {   super.onResume();
+    /*	
+		if(nr_tasks>0){  		
+			playButton.setOnClickListener(null);
+			playButton.setImageResource(R.drawable.ic_cancel_icon);
+			playButton.setAnimation(ranim);
+
+	 
+		}else if ((nr_tasks==0)&&done){
+		       playButton.setOnClickListener(playListener); 
+			   playButton.clearAnimation();
+			   playButton.setImageResource(R.drawable.ic_play);	
+		
+		}
+    */
+    	Log.i(TAG, "onResume Called" );
+    	if (mCamera==null){
+    	mCamera = getCameraInstance();
+    	Log.i(TAG, "mCamera attached again" );
+    	}
+ 
+    }
+    @Override
+    public void onPause()
+    {
+    	
+        super.onPause();
+  	  //state.putInt("nr_tasks", nr_tasks);
+  	 // state.putBoolean("done", done);
+    	Log.i(TAG, "paused" );
+    }
+    public void onDestroy() {
+        super.onDestroy();
+
+        deleteDirectory(session_directory);
+        Log.i(TAG, "DESTROYED");
+        if (mCamera!= null){
+            stopPreviewAndFreeCamera();
+        }
+    }
+
+
+    @SuppressLint("SimpleDateFormat")
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        return false;
+    }
+    
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+      if (keyCode == KeyEvent.KEYCODE_CAMERA) {
+
+        Log.i(TAG,"Camera Key down ");
+        try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} // LOCK is held          
+        	mCamera.autoFocus(takePicture);  
+            return true; // do nothing on camera button
+      	}
+      	return super.onKeyDown(keyCode, event);
+    }
+   
+    
+
+
+    public void shoot(){
+	     mCamera.takePicture(null,null,this);	
+	      Log.i(TAG,"take picture call DONE");	
+    }    		      
+    		      
+    
+    @Override
+    public void onPictureTaken(byte[] data, Camera camera) {
+    	Log.i(TAG, "CALLBACK");
+    	
+        try { //async task for storing the photo
+  		          new SavePhotoTask().execute(data, null, null);
+  		          Log.i(TAG, "AsyncTask started");
+  		        	
+  	     } catch (final Exception e){
+  		        	Log.i(TAG, "Cannot save" , e);
+  		            //some exceptionhandling
+  		 }finally{
+        		nextPhoto = true;
+     
+   		}
+        mCamera.startPreview();
+	}
+  		    
+   
+    
+    class SavePhotoTask extends AsyncTask<byte[], Void, Void> {
+        @SuppressLint("SimpleDateFormat")
+        
+        private String dirName;
+        
+        @Override
+        protected void onPostExecute(Void result){
+        	
+        	synchronized(nr_tasks_lock){
+        		if(nr_tasks==1){
+        	
+        	        playButton.setOnClickListener(playListener); 
+        			playButton.clearAnimation();
+        			playButton.setImageResource(R.drawable.ic_play);	
+    
+        		}
+          		Log.i(TAG, "thread "+nr_tasks+ " exiting" );
+        		nr_tasks--;     
+  
+        		
+        	}
+    
+        }
+        
+        @Override
+        protected void onPreExecute(){
+        	synchronized(nr_tasks_lock){
+        		nr_tasks++;
+    
+        		playButton.setOnClickListener(null);
+        		playButton.setImageResource(R.drawable.ic_cancel_icon);
+                playButton.setAnimation(ranim);
+        		Log.i(TAG, "thread "+nr_tasks +" starting" );      		
+        	}
+        	Toast.makeText(getBaseContext(),"processing... wait 20 sec.", 
+                    Toast.LENGTH_LONG).show();
+
+        }
+        
+          
+		@Override
+        protected Void doInBackground(byte[]... jpeg) {
+	        
+            long startTime = System.nanoTime();    
+            
+        	   SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+               String currentDateandTime = sdf.format(new Date());
+               
+               
+               storage = Environment.getExternalStorageDirectory().getPath() + File.separator + "Pencilation" + File.separator;
+               dirName =storage +"session"+File.separator+ "img_" + currentDateandTime + System.currentTimeMillis();
+               fileName =dirName + ".JPG";
+                
+
+               Log.i(TAG, "creating directory for single image " + this.getClass());
+               File directory = new File(dirName);
+               directory.mkdirs();
+
+            Log.i(TAG, "saved " + fileName);
+
+          try {
+             	FileOutputStream fos=new FileOutputStream(fileName);
+    			fos.write(jpeg[0]);
+    			fos.close();
+          }
+          catch (java.io.IOException e) {
+            Log.e(TAG,"Exception in SavePhotoTask");
+          }
+          Log.d(TAG,"starting native part");
+          FindFrames(fileName, dirName, storage);
+          Log.d(TAG,"native finished, back in java");
+          long estimatedTime = System.nanoTime() - startTime;
+          Log.i(TAG,"picture processed in " + estimatedTime/1000000000 +"sec");	  
+//start intent   
+          return(null);
+        }
+    }
+
+    public static Camera getCameraInstance(){
+        Camera c = null;
+        try {
+            c = Camera.open(); // attempt to get a Camera instance
+        }
+        catch (Exception e){
+        	Log.e(TAG, "CAN'T GET CAMERA");
+            // Camera is not available (in use or does not exist)
+        }
+        return c; // returns null if camera is unavailable
+    }
+     
+    private void stopPreviewAndFreeCamera() {
+        if (mCamera != null) {
+            mCamera.stopPreview();
+            mCamera.release();
+            mCamera = null;
+        }
+    }
+    
+    private void copyAssets() {
+        AssetManager assetManager = getAssets();
+        String[] files = null;
+        try {
+            files = assetManager.list("");
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to get asset file list.", e);
+        }
+        for(String filename : files) {
+            InputStream in = null;
+            OutputStream out = null;
+	            try {            
+
+	              in = assetManager.open(filename);
+	              File outFile = new File(Environment.getExternalStorageDirectory().getPath() + File.separator + "Pencilation" + File.separator, filename);
+	              out = new FileOutputStream(outFile);
+	              copyFile(in, out);
+	              in.close();
+	              in = null;
+	              out.flush();
+	              out.close();
+	              out = null;
+	            } catch(IOException e) {
+	               // Log.i(TAG, "Failed to copy asset file: " + filename, e);
+	            }
+                   
+        }
+    }
+    private void copyFile(InputStream in, OutputStream out) throws IOException {
+        byte[] buffer = new byte[1024];
+        int read;
+        while((read = in.read(buffer)) != -1){
+          out.write(buffer, 0, read);
+        }
+    }
+    
+   private boolean deleteDirectory(File directory) {
+        if(directory.exists()){
+            File[] files = directory.listFiles();
+            if(null!=files){
+                for(int i=0; i<files.length; i++) {
+                    if(files[i].isDirectory()) {
+                        deleteDirectory(files[i]);
+                    }
+                    else {
+                        files[i].delete();
+                    }
+                }
+            }
+        }
+        Log.d(TAG,"deleting ");
+
+        return(directory.delete());
+    }
+    
+    
+} 
+
